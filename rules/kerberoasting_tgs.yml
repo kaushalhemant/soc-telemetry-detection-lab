@@ -1,0 +1,25 @@
+id: RULE-010
+title: Active Directory Kerberoasting Service Ticket Request
+status: experimental
+description: Detects anomalous Kerberos TGS requests targeting Active Directory Service Principal Names with weak RC4 encryption (0x17).
+author: SOC Detection Team
+date: 2026/08/20
+severity: HIGH
+log_source:
+  log_type: auth.log
+detection:
+  selection:
+    event_id: KERBEROS_TGS_REQUEST
+    process_name: GetUserSPNs.py
+  condition:
+    - field: details.ticket_encryption
+      operator: contains
+      value: "0x17"
+tags:
+  mitre_tactic: Credential Access
+  mitre_technique_id: T1558.003
+  mitre_technique_name: Steal or Forge Kerberos Tickets - Kerberoasting
+remediation:
+  - Identify requesting user account and audit Kerberos TGS request frequency.
+  - Enforce AES256 encryption on Service Principal Accounts.
+  - Rotate passwords for targeted SPN service accounts to 25+ character complex passwords.

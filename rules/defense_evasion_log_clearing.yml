@@ -1,0 +1,25 @@
+id: RULE-007
+title: Security Audit Log Clearing & Defense Evasion
+status: production
+description: Detects process execution attempting to purge, unlink, or disable system security logs (auth.log, syslog, wevtutil cl).
+author: SOC Detection Lab
+date: 2026/01/15
+severity: CRITICAL
+log_source:
+  log_type: auditd.log
+detection:
+  selection:
+    event_id: EVASION_LOG_CLEAR
+    process_name: rm
+  condition:
+    - field: details.action
+      operator: equals
+      value: log_file_deletion
+tags:
+  mitre_tactic: Defense Evasion
+  mitre_technique_id: T1070.002
+  mitre_technique_name: "Indicator Removal on Host: Clear Linux/Windows Logs"
+remediation:
+  - Immediately preserve system memory dump and trigger forensic isolation.
+  - Audit file deletion syscalls and identify parent process tree.
+  - Enforce immutable, remote log forwarding to centralized SIEM.

@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  soc-dashboard-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: soc_detection_lab
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ENVIRONMENT=production
+    volumes:
+      - ./rules:/app/rules
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/rules"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  target-host-alpha:
+    image: alpine:latest
+    container_name: target_host_alpha
+    command: sh -c "echo 'Containerized target host node simulation active.' && tail -f /dev/null"
+    restart: unless-stopped

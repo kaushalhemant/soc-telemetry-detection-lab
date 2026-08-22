@@ -1,0 +1,25 @@
+id: RULE-011
+title: LSASS Memory Access & Credential Dumping
+status: experimental
+description: Detects process memory access targeting lsass.exe process memory via comsvcs.dll or rundll32 for credential harvesting.
+author: SOC Detection Team
+date: 2026/08/20
+severity: CRITICAL
+log_source:
+  log_type: auditd.log
+detection:
+  selection:
+    event_id: AUDITD_EXECVE
+    process_name: rundll32.exe
+  condition:
+    - field: details.target_process
+      operator: equals
+      value: lsass.exe
+tags:
+  mitre_tactic: Credential Access
+  mitre_technique_id: T1003.001
+  mitre_technique_name: OS Credential Dumping - LSASS Memory
+remediation:
+  - Enable Credential Guard on host endpoint.
+  - Revoke active user sessions and reset domain account credentials.
+  - Isolate host and perform memory forensics to verify credential exposure.

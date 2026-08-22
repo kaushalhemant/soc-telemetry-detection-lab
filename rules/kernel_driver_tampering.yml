@@ -1,0 +1,25 @@
+id: RULE-009
+title: Vulnerable Kernel Driver Loading (BYOVD Driver Tampering)
+status: experimental
+description: Detects loading of known vulnerable kernel drivers (RTCore64.sys) used in BYOVD attacks to disable EDR sensors.
+author: SOC Detection Team
+date: 2026/08/20
+severity: CRITICAL
+log_source:
+  log_type: syslog
+detection:
+  selection:
+    event_id: KERNEL_DRIVER_LOAD
+    process_name: sc.exe
+  condition:
+    - field: details.action
+      operator: equals
+      value: kernel_driver_tampering
+tags:
+  mitre_tactic: Privilege Escalation
+  mitre_technique_id: T1068
+  mitre_technique_name: Exploitation for Privilege Escalation - BYOVD
+remediation:
+  - Unload driver using sc stop.
+  - Enable Windows Defender Application Control driver blocklist.
+  - Inspect system audit logs for kernel memory patch attempts.

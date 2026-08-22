@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SOC Analyst Workstation | Telemetry & Detection Console</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Header Bar -->
+  <header class="navbar">
+    <div class="brand">
+      <span class="brand-title">SOC ANALYST WORKSTATION</span>
+      <span class="brand-divider">/</span>
+      <span class="brand-sub">Detection Engine & Telemetry Console</span>
+    </div>
+
+    <div class="system-status">
+      <div class="status-indicator active">
+        <span class="dot"></span>
+        <span class="status-text">Engine Streaming</span>
+      </div>
+      <div class="badge" id="agent-status-badge">Agents: <strong>0 Live</strong></div>
+      <div class="badge">Rules: <strong id="rules-count-badge">11 Loaded</strong></div>
+      <button class="btn-sm btn-primary" id="mode-toggle-btn" onclick="toggleEngineMode()">Mode: Production Agent</button>
+      <a class="btn-sm text-link" href="/api/mitre/navigator" target="_blank">ATT&CK Navigator JSON</a>
+    </div>
+  </header>
+
+  <!-- Page View Navigation Tabs -->
+  <div class="view-tab-bar">
+    <button class="view-tab-btn active" id="tab-standard" onclick="switchConsoleView('standard')">🌐 Standard Telemetry Console</button>
+    <button class="view-tab-btn" id="tab-uncommon" onclick="switchConsoleView('uncommon')">⚠️ Uncommon & Advanced Threats Matrix</button>
+    <button class="view-tab-btn" id="tab-tools" onclick="switchConsoleView('tools')">🔌 Tool Integrations (Wireshark & Burp Suite)</button>
+  </div>
+
+  <!-- Metrics Bar -->
+  <section class="metrics-bar">
+    <div class="metric-item">
+      <span class="metric-label">Processed Events</span>
+      <span class="metric-val" id="metric-total-events">0</span>
+    </div>
+    <div class="metric-divider"></div>
+    <div class="metric-item">
+      <span class="metric-label">Precision</span>
+      <span class="metric-val text-green" id="metric-precision">100.0%</span>
+    </div>
+    <div class="metric-divider"></div>
+    <div class="metric-item">
+      <span class="metric-label">Recall</span>
+      <span class="metric-val text-green" id="metric-recall">100.0%</span>
+    </div>
+    <div class="metric-divider"></div>
+    <div class="metric-item">
+      <span class="metric-label">False Positive Rate</span>
+      <span class="metric-val text-muted" id="metric-fpr">0.0%</span>
+    </div>
+    <div class="metric-divider"></div>
+    <div class="metric-item">
+      <span class="metric-label">MTTD</span>
+      <span class="metric-val" id="metric-mttd">3.8 ms</span>
+    </div>
+  </section>
+
+  <!-- View 1: Standard Threats Console -->
+  <div id="view-standard" class="view-pane active">
+    <!-- Threat Scenario Toolbar -->
+    <section class="control-panel">
+      <span class="toolbar-label">Standard Threat Vectors:</span>
+      <div class="button-group">
+        <button class="btn btn-secondary" onclick="triggerScenario('brute_force')">SSH Brute Force</button>
+        <button class="btn btn-secondary" onclick="triggerScenario('privilege_escalation')">Privilege Escalation</button>
+        <button class="btn btn-secondary" onclick="triggerScenario('anomalous_process')">Webshell Execution</button>
+        <button class="btn btn-secondary" onclick="triggerScenario('persistence')">Cron Persistence</button>
+        <button class="btn btn-secondary" onclick="triggerScenario('lateral_movement')">WinRM / Lateral Move</button>
+        <button class="btn btn-secondary" onclick="triggerScenario('data_exfiltration')">DNS Exfiltration</button>
+        <button class="btn btn-secondary" onclick="triggerScenario('defense_evasion')">Log Clearing Evasion</button>
+        <button class="btn btn-outline" onclick="clearAlerts()">Clear Alerts</button>
+      </div>
+    </section>
+
+    <!-- Multi-Pane Workstation Grid -->
+    <main class="console-grid">
+      <!-- Left Pane: Alert Triage Queue -->
+      <section class="panel alert-panel">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <h2>Active Security Detections</h2>
+            <span class="badge badge-count" id="alert-counter-badge">0 Alerts</span>
+          </div>
+          <div class="triage-filter">
+            <button class="filter-btn active" onclick="filterTriage('ALL')">All</button>
+            <button class="filter-btn" onclick="filterTriage('NEW')">New</button>
+            <button class="filter-btn" onclick="filterTriage('INVESTIGATING')">Investigating</button>
+            <button class="filter-btn" onclick="filterTriage('CLOSED')">Closed</button>
+          </div>
+        </div>
+        <div class="alert-list" id="alerts-container">
+          <div class="empty-state">No security detections recorded. Execute a threat vector to simulate telemetry events.</div>
+        </div>
+      </section>
+
+      <!-- Right Pane: Split Telemetry Console & Rules Matrix -->
+      <section class="right-pane">
+        <!-- Live Log Stream Console -->
+        <div class="panel telemetry-panel">
+          <div class="panel-header">
+            <h2>Live Container Telemetry Stream</h2>
+            <div class="console-controls">
+              <button class="sm-btn" onclick="clearTelemetry()">Clear Stream</button>
+              <span class="live-status">LIVE</span>
+            </div>
+          </div>
+          <div class="log-stream-console" id="log-console">
+            <!-- Real-time logs stream here -->
+          </div>
+        </div>
+
+        <!-- Detection Rule Matrix & Exporter -->
+        <div class="panel rules-panel">
+          <div class="panel-header">
+            <h2>SIGMA Detection Rules & Portability Exporter</h2>
+          </div>
+          <div class="rules-grid" id="rules-container">
+            <!-- Rules dynamically loaded here -->
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- View 2: Dedicated Uncommon & Advanced Threats Page -->
+  <div id="view-uncommon" class="view-pane">
+    <section class="control-panel uncommon-panel">
+      <span class="toolbar-label">Uncommon APT Threat Simulators:</span>
+      <div class="button-group">
+        <button class="btn btn-warning" onclick="triggerScenario('process_hollowing')">Process Hollowing (T1055.012)</button>
+        <button class="btn btn-warning" onclick="triggerScenario('kernel_driver_tampering')">BYOVD Kernel Tampering (T1068)</button>
+        <button class="btn btn-warning" onclick="triggerScenario('kerberoasting')">AD Kerberoasting (T1558.003)</button>
+        <button class="btn btn-warning" onclick="triggerScenario('lsass_dump')">LSASS Memory Dump (T1003.001)</button>
+        <button class="btn btn-outline" onclick="clearAlerts()">Clear Alerts</button>
+      </div>
+    </section>
+
+    <main class="uncommon-grid">
+      <!-- Left Column: Uncommon Threat Cards & Mechanics -->
+      <section class="panel">
+        <div class="panel-header">
+          <h2>⚠️ Uncommon & Advanced Threat Vector Repository</h2>
+        </div>
+        <div class="uncommon-cards-container">
+          <div class="apt-card">
+            <div class="apt-header">
+              <span class="rule-id">RULE-008</span>
+              <span class="sev-badge CRITICAL">CRITICAL</span>
+            </div>
+            <div class="apt-title">Process Hollowing & Code Injection</div>
+            <div class="apt-meta">MITRE ATT&CK: <strong>T1055.012</strong> | Target: <code>svchost.exe / explorer.exe</code></div>
+            <p class="apt-desc">Injects shellcode into a suspended target process or unmaps executable pages (<code>NtUnmapViewOfSection</code>) to hide malicious code inside legitimate system processes.</p>
+            <button class="btn btn-sm btn-primary" onclick="triggerScenario('process_hollowing')">Simulate Process Hollowing</button>
+          </div>
+
+          <div class="apt-card">
+            <div class="apt-header">
+              <span class="rule-id">RULE-009</span>
+              <span class="sev-badge CRITICAL">CRITICAL</span>
+            </div>
+            <div class="apt-title">BYOVD Kernel Driver Tampering</div>
+            <div class="apt-meta">MITRE ATT&CK: <strong>T1068</strong> | Target: <code>RTCore64.sys / gdrv.sys</code></div>
+            <p class="apt-desc">Threat actors load signed but vulnerable kernel drivers to gain ring 0 access and terminate EDR/AV security sensors kernel callbacks.</p>
+            <button class="btn btn-sm btn-primary" onclick="triggerScenario('kernel_driver_tampering')">Simulate BYOVD Driver Load</button>
+          </div>
+
+          <div class="apt-card">
+            <div class="apt-header">
+              <span class="rule-id">RULE-010</span>
+              <span class="sev-badge HIGH">HIGH</span>
+            </div>
+            <div class="apt-title">Active Directory Kerberoasting</div>
+            <div class="apt-meta">MITRE ATT&CK: <strong>T1558.003</strong> | Protocol: <code>Kerberos TGS (0x17 RC4)</code></div>
+            <p class="apt-desc">Requests Ticket Granting Service (TGS) tickets for Service Principal Names (SPNs) encrypted with weak RC4-HMAC algorithms to crack service account passwords offline.</p>
+            <button class="btn btn-sm btn-primary" onclick="triggerScenario('kerberoasting')">Simulate Kerberoasting TGS</button>
+          </div>
+
+          <div class="apt-card">
+            <div class="apt-header">
+              <span class="rule-id">RULE-011</span>
+              <span class="sev-badge CRITICAL">CRITICAL</span>
+            </div>
+            <div class="apt-title">LSASS Credential Memory Dumping</div>
+            <div class="apt-meta">MITRE ATT&CK: <strong>T1003.001</strong> | Target: <code>lsass.exe</code> via <code>comsvcs.dll</code></div>
+            <p class="apt-desc">Abuses legitimate Windows DLLs (<code>comsvcs.dll</code>) or diagnostic utilities (<code>procdump</code>) to dump LSASS process memory to disk for plaintext credential extraction.</p>
+            <button class="btn btn-sm btn-primary" onclick="triggerScenario('lsass_dump')">Simulate LSASS Memory Dump</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Uncommon Detections & Live Telemetry -->
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Uncommon Threat Detections Queue</h2>
+          <span class="badge badge-count" id="uncommon-alert-counter">0 Alerts</span>
+        </div>
+        <div class="alert-list" id="uncommon-alerts-container">
+          <div class="empty-state">No uncommon threat detections recorded. Click a simulator button above to test advanced APT vectors!</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- View 3: Dedicated Tool Integrations Suite (Wireshark & Burp Suite) -->
+  <div id="view-tools" class="view-pane">
+    <section class="control-panel uncommon-panel">
+      <span class="toolbar-label">Security Tool Integrations Suite:</span>
+      <span class="text-muted" style="font-size: 11px;">Upload Burp Suite Proxy History XML or Export Network Alerts directly to Wireshark PCAPs</span>
+    </section>
+
+    <main class="uncommon-grid">
+      <!-- Left Column: Burp Suite Proxy Log Importer -->
+      <section class="panel">
+        <div class="panel-header">
+          <h2>🟠 Burp Suite HTTP History Importer</h2>
+        </div>
+        <div class="uncommon-cards-container">
+          <div class="apt-card">
+            <div class="apt-title">Import Burp Suite Proxy XML Items</div>
+            <p class="apt-desc">Export items from Burp Suite (<code>Proxy -> HTTP history -> Select items -> Right Click -> Save items</code>) as XML and paste or upload below to stream Burp HTTP traffic into the SOC engine.</p>
+            <textarea id="burp-xml-input" placeholder="Paste Burp Suite XML content (<items><item>...</item></items>) here..." class="input-field" style="height: 140px; font-family: var(--font-mono); font-size: 11px;"></textarea>
+            <button class="btn btn-warning" onclick="importBurpXmlLogs()">Ingest Burp Proxy Traffic</button>
+            <div id="burp-import-status" style="font-family: var(--font-mono); font-size: 11px; color: #3fb950;"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Wireshark & Burp Exporter Features -->
+      <section class="panel">
+        <div class="panel-header">
+          <h2>🦈 Wireshark PCAP & Filter Generator</h2>
+        </div>
+        <div class="uncommon-cards-container">
+          <div class="apt-card">
+            <div class="apt-title">1-Click PCAP Packet Capture Generation</div>
+            <p class="apt-desc">Click any network-related alert (DNS Exfiltration, SSH Brute Force, WinRM, Kerberoasting) in the triage queue to instantly generate and download a valid binary <code>.pcap</code> file ready for Wireshark analysis.</p>
+          </div>
+          <div class="apt-card">
+            <div class="apt-title">Burp Suite Repeater / Intruder Export</div>
+            <p class="apt-desc">Web detections auto-generate raw HTTP requests and cURL commands formatted for Burp Suite Repeater or Intruder fuzzing.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Alert Triage & Remediation Modal -->
+  <div class="modal-overlay" id="remediation-modal" onclick="closeModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 id="modal-rule-title">Alert Triage & Incident Analysis</h3>
+        <button class="close-btn" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="detail-grid">
+          <div class="detail-cell">
+            <span class="cell-label">Alert ID</span>
+            <span class="cell-val mono" id="modal-alert-id">ALT-00000000</span>
+          </div>
+          <div class="detail-cell">
+            <span class="cell-label">Rule ID</span>
+            <span class="cell-val mono" id="modal-rule-id">RULE-001</span>
+          </div>
+          <div class="detail-cell">
+            <span class="cell-label">Severity</span>
+            <span class="cell-val" id="modal-severity-badge">HIGH</span>
+          </div>
+          <div class="detail-cell">
+            <span class="cell-label">ATT&CK Technique</span>
+            <span class="cell-val mono" id="modal-mitre-tag">T1110.001</span>
+          </div>
+        </div>
+
+        <div class="section-title">Triggering Telemetry Log Evidence</div>
+        <pre class="log-code-box" id="modal-raw-logs"></pre>
+
+        <div class="section-title">Analyst Triage & Tool Integration Actions</div>
+        <div class="triage-actions-bar">
+          <button class="btn btn-sm btn-primary" onclick="setAlertState('INVESTIGATING')">Mark Investigating</button>
+          <button class="btn btn-sm btn-warning" onclick="setAlertState('ESCALATED')">Escalate Incident</button>
+          <button class="btn btn-sm btn-outline" onclick="setAlertState('CLOSED')">Close Alert</button>
+          <button class="btn btn-sm btn-outline" onclick="tuneCurrentAlert()">Tune Rule Threshold</button>
+          <button class="btn btn-sm btn-primary" onclick="downloadIncidentReport()">Export Incident Report</button>
+          <button class="btn btn-sm btn-secondary" onclick="downloadPcapCapture()">🦈 Download Wireshark PCAP</button>
+          <button class="btn btn-sm btn-warning" onclick="exportBurpRepeater()">🟠 Burp Repeater & cURL</button>
+        </div>
+
+        <div class="section-title">Analyst Notes Log</div>
+        <div class="notes-log-box" id="modal-notes-log">No analyst notes recorded yet.</div>
+
+        <div class="note-input-row">
+          <input type="text" id="analyst-note-input" placeholder="Enter analyst investigation note..." class="input-field" />
+          <button class="btn btn-sm btn-primary" onclick="addAnalystNote()">Add Note</button>
+        </div>
+
+        <div class="section-title">Tool Integrations & SIGMA Conversions</div>
+        <div class="export-box">
+          <div class="export-header">🦈 Wireshark Display Filter</div>
+          <pre class="code-export" id="modal-wireshark-filter"></pre>
+          <div class="export-header">🟠 Burp Suite Repeater Request / cURL Command</div>
+          <pre class="code-export" id="modal-burp-request"></pre>
+          <div class="export-header">Splunk Search Processing Language (SPL)</div>
+          <pre class="code-export" id="modal-splunk-spl"></pre>
+          <div class="export-header">Elastic Query DSL / KQL</div>
+          <pre class="code-export" id="modal-elastic-kql"></pre>
+        </div>
+
+        <div class="section-title">Recommended Incident Response Actions</div>
+        <div class="remediation-box" id="modal-remediation-steps"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

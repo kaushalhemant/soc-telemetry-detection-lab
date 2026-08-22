@@ -1,0 +1,25 @@
+id: RULE-005
+title: Remote Service Execution & WinRM Lateral Movement
+status: production
+description: Detects remote execution tools (wsmprovhost.exe, psexec, remote command invocation via SSH/WinRM) executed across internal nodes.
+author: SOC Detection Lab
+date: 2026/01/15
+severity: HIGH
+log_source:
+  log_type: auth.log
+detection:
+  selection:
+    event_id: LATERAL_WINRM_EXEC
+    process_name: sshd
+  condition:
+    - field: details.action
+      operator: equals
+      value: remote_service_execution
+tags:
+  mitre_tactic: Lateral Movement
+  mitre_technique_id: T1021.006
+  mitre_technique_name: Windows Remote Management / Remote Services
+remediation:
+  - Isolate initiating source IP address.
+  - Audit remote administrative sessions and WinRM / SSH key authentication permissions.
+  - Require multi-factor authentication for inter-node administrative access.

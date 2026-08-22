@@ -1,0 +1,34 @@
+id: RULE-002
+title: Unauthorized Privilege Elevation & Root Shell Spawn
+description: Identifies unauthorized setuid file execution or non-root user spawning an interactive root shell (UID 0) via sudo or binary exploitation.
+status: production
+author: SOC Detection Lab
+date: 2026/01/15
+severity: CRITICAL
+
+log_source:
+  log_type: auditd.log
+
+detection:
+  selection:
+    event_id:
+      - AUDITD_EXECVE_SUID
+      - SUDO_PRIV_ELEVATION
+      - AUDITD_ROOT_SHELL_SPAWN
+  condition:
+    - field: details.uid
+      operator: equals
+      value: 0
+    - field: parent_process_name
+      operator: in
+      value: ["sudo", "chmod", "su", "bash"]
+
+tags:
+  mitre_tactic: Privilege Escalation
+  mitre_technique_id: T1548.001
+  mitre_technique_name: Setuid and Setgid
+
+remediation:
+  - Audit sudoers file (/etc/sudoers) for over-permissive entries.
+  - Scan system binaries for non-standard SUID/SGID permissions using 'find / -perm -4000'.
+  - Immediately terminate suspicious shell process tree and isolate the compromised container.

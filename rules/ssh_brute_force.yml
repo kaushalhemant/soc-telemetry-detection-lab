@@ -1,0 +1,29 @@
+id: RULE-001
+title: High Rate SSH Authentication Failure (Brute Force)
+description: Detects multiple failed SSH authentication attempts from a single source IP within a brief time window, indicative of brute-force credential stuffing.
+status: experimental
+author: SOC Detection Lab
+date: 2026/01/15
+severity: HIGH
+
+log_source:
+  log_type: auth.log
+
+detection:
+  selection:
+    event_id: SSH_AUTH_FAIL
+    process_name: sshd
+  time_window_seconds: 30
+  threshold:
+    count: 5
+    group_by: source_ip
+
+tags:
+  mitre_tactic: Credential Access
+  mitre_technique_id: T1110.001
+  mitre_technique_name: Password Guessing
+
+remediation:
+  - Block source IP on edge firewall or iptables.
+  - Enforce SSH key-based authentication and disable password logins in /etc/ssh/sshd_config.
+  - Implement Fail2ban or rate-limiting middleware.

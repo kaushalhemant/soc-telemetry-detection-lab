@@ -1,0 +1,25 @@
+id: RULE-006
+title: Data Exfiltration via DNS TXT Query Tunneling
+status: production
+description: Detects encoded DNS TXT queries and high-volume outbound data transfers indicative of DNS tunneling exfiltration.
+author: SOC Detection Lab
+date: 2026/01/15
+severity: CRITICAL
+log_source:
+  log_type: auditd.log
+detection:
+  selection:
+    event_id: EXFIL_DNS_TUNNEL
+    process_name: nslookup
+  condition:
+    - field: details.query_type
+      operator: equals
+      value: TXT
+tags:
+  mitre_tactic: Exfiltration
+  mitre_technique_id: T1071.004
+  mitre_technique_name: "Application Layer Protocol: DNS Tunneling"
+remediation:
+  - Block destination C2 IP and anomalous DNS domain on perimeter resolvers.
+  - Restrict host outbound DNS queries strictly to internal managed DNS infrastructure.
+  - Inspect query payload contents and terminate offending process.

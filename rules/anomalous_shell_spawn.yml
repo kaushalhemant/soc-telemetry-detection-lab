@@ -1,0 +1,31 @@
+id: RULE-003
+title: Anomalous Shell Spawning from Web Server Process
+description: Detects command shells (/bin/sh, /bin/bash, netcat) spawned by web server daemons (nginx, apache2, www-data), indicating webshell execution or command injection.
+status: production
+author: SOC Detection Lab
+date: 2026/01/15
+severity: CRITICAL
+
+log_source:
+  log_type: auditd.log
+
+detection:
+  selection:
+    event_id: AUDITD_ANOMALOUS_CHILD_PROCESS
+  condition:
+    - field: parent_process_name
+      operator: in
+      value: ["nginx", "apache2", "httpd", "php-fpm"]
+    - field: process_name
+      operator: in
+      value: ["sh", "bash", "nc", "ncat", "python", "perl"]
+
+tags:
+  mitre_tactic: Execution
+  mitre_technique_id: T1059.004
+  mitre_technique_name: Unix Shell Execution via Web Vector
+
+remediation:
+  - Isolate web application container immediately.
+  - Review web server access logs for file upload vulnerabilities or remote code execution payloads.
+  - Enforce read-only root filesystems for app containers and restrict process capabilities via AppArmor/SELinux.

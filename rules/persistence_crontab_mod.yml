@@ -1,0 +1,24 @@
+id: RULE-004
+title: Crontab Modification for Scheduled Persistence
+description: Identifies modifications to system crontabs or cron directories, commonly used by adversaries for maintaining persistent access across reboots.
+status: experimental
+author: SOC Detection Lab
+date: 2026/01/15
+severity: MEDIUM
+
+log_source:
+  log_type: syslog
+
+detection:
+  selection:
+    event_id: PERSISTENCE_CRON_EDIT
+    process_name: crontab
+
+tags:
+  mitre_tactic: Persistence
+  mitre_technique_id: T1053.003
+  mitre_technique_name: Scheduled Task/Cron
+
+remediation:
+  - Inspect user crontab files in /var/spool/cron/crontabs/ and /etc/cron.*.
+  - Verify authorized cron jobs and purge unrecognized curl/wget backdoor downloads.

@@ -1,0 +1,25 @@
+id: RULE-008
+title: Process Hollowing and Memory Code Injection
+status: experimental
+description: Detects process injection or process hollowing where a target system process (svchost.exe) is spawned from a temporary directory or injected with executable memory.
+author: SOC Detection Team
+date: 2026/08/20
+severity: CRITICAL
+log_source:
+  log_type: auditd.log
+detection:
+  selection:
+    event_id: AUDITD_EXECVE
+    process_name: svchost.exe
+  condition:
+    - field: details.action
+      operator: equals
+      value: process_hollowing
+tags:
+  mitre_tactic: Defense Evasion
+  mitre_technique_id: T1055.012
+  mitre_technique_name: Process Injection - Process Hollowing
+remediation:
+  - Isolate host immediately and suspend parent PID.
+  - Dump process RAM using RAM capture tool to inspect injected memory pages.
+  - Terminate unauthorized process tree.
