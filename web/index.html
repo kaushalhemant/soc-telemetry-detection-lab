@@ -467,18 +467,32 @@ body { background-color: var(--bg-dark); color: var(--text-main); font-family: v
           <button class="view-tab-btn" id="mtab-agent" onclick="switchManualTab('agent')">💻 5. Production Agent Ingest</button>
         </div>
 
-        <!-- Tab 1: Quickstart -->
+        <!-- Tab 1: Quickstart & How to Connect -->
         <div class="view-pane active" id="mpane-quickstart" style="padding-top: 12px; gap: 10px;">
           <div class="section-title">What is this project?</div>
           <p style="font-size: 12px; color: var(--text-main); line-height: 1.5;">
             The <strong>SOC Telemetry Generation & Detection Lab Engine</strong> is a full-stack security operations center (SOC) simulation environment. It generates real-time Linux & Windows telemetry, parses SIGMA YAML rules, detects threat vectors (MITRE ATT&CK), and provides incident triage, Wireshark PCAP generation, and Burp Suite HTTP proxy integration.
           </p>
 
-          <div class="section-title">How to test features in 3 steps:</div>
-          <div style="background: var(--card-bg); border: 1px solid var(--border-color); padding: 10px; border-radius: 6px; font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
-            <div><strong>Step 1: Execute Threat Vectors</strong><br/><span style="color: var(--text-muted);">Click any toolbar button like <code>SSH Brute Force</code>, <code>Privilege Escalation</code>, <code>LSASS Dump</code>, or <code>Kernel Driver Tampering</code>.</span></div>
-            <div><strong>Step 2: Watch Real-Time Telemetry Stream & Detections</strong><br/><span style="color: var(--text-muted);">View live authlog/syslog events streaming into the center console while newly triggered detection alert cards populate the left pane with severity colors.</span></div>
-            <div><strong>Step 3: Open Alert Triage Modal</strong><br/><span style="color: var(--text-muted);">Click any alert card in the left pane to view MITRE ATT&CK technique IDs, raw log evidence, Splunk/Elastic query conversions, and export binary <code>.pcap</code> network captures!</span></div>
+          <div class="section-title">⚡ How to Use & Connect in 3 Simple Ways:</div>
+          
+          <div style="background: var(--card-bg); border: 1px solid var(--border-color); padding: 10px; border-radius: 6px; font-size: 12px; display: flex; flex-direction: column; gap: 10px;">
+            <div>
+              <strong style="color: #38bdf8;">Method 1: Interactive Web Threat Simulators (Instant Demo)</strong><br/>
+              <span style="color: var(--text-muted);">Click any toolbar button like <code>SSH Brute Force</code>, <code>Privilege Escalation</code>, <code>LSASS Dump</code>, or <code>Kernel Driver Tampering</code> to trigger real-time attacks. Watch alerts and live logs stream immediately!</span>
+            </div>
+            
+            <div>
+              <strong style="color: #3fb950;">Method 2: Connect a Real Endpoint Agent (Terminal Command)</strong><br/>
+              <span style="color: var(--text-muted);">To stream real system logs from your computer into this cloud SOC engine, open terminal/CMD and run:</span>
+              <pre class="log-code-box" style="margin-top: 4px;">python agent/collector.py --server https://soc-telemetry-detection-lab.vercel.app</pre>
+            </div>
+
+            <div>
+              <strong style="color: #fbbf24;">Method 3: Run Full Engine Locally (Offline Mode)</strong><br/>
+              <span style="color: var(--text-muted);">To run the complete engine & web console locally on your own computer:</span>
+              <pre class="log-code-box" style="margin-top: 4px;">python setup_and_run.py</pre>
+            </div>
           </div>
         </div>
 

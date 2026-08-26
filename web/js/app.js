@@ -19,6 +19,11 @@ document.addEventListener("DOMContentLoaded", () => {
   setInterval(fetchMetrics, 2000);
   setInterval(fetchInitialData, 5000);
   setInterval(startClientTelemetryTicker, 3000);
+
+  // Auto-show Quickstart & Connection Manual on first visit
+  if (!localStorage.getItem("soc_manual_visited")) {
+    setTimeout(openManualModal, 400);
+  }
 });
 
 const baselineLogs = [
@@ -528,10 +533,12 @@ function escapeHtml(str) {
 }
 
 function openManualModal() {
+  localStorage.setItem("soc_manual_visited", "true");
   document.getElementById("manual-modal").classList.add("active");
 }
 
 function closeManualModal() {
+  localStorage.setItem("soc_manual_visited", "true");
   document.getElementById("manual-modal").classList.remove("active");
 }
 
