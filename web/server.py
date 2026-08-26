@@ -376,6 +376,32 @@ if os.path.exists(STATIC_DIR):
     except Exception as e:
         print(f"[StaticFiles Mount Warning] {e}")
 
+@app.get("/static/css/style.css")
+def get_css():
+    candidate_paths = [
+        os.path.join(STATIC_DIR, "css", "style.css"),
+        os.path.join(PROJECT_ROOT, "web", "css", "style.css"),
+        os.path.join(os.getcwd(), "web", "css", "style.css"),
+    ]
+    for p in candidate_paths:
+        if os.path.exists(p) and os.path.isfile(p):
+            with open(p, "r", encoding="utf-8") as f:
+                return Response(content=f.read(), media_type="text/css")
+    return Response(content="", media_type="text/css")
+
+@app.get("/static/js/app.js")
+def get_js():
+    candidate_paths = [
+        os.path.join(STATIC_DIR, "js", "app.js"),
+        os.path.join(PROJECT_ROOT, "web", "js", "app.js"),
+        os.path.join(os.getcwd(), "web", "js", "app.js"),
+    ]
+    for p in candidate_paths:
+        if os.path.exists(p) and os.path.isfile(p):
+            with open(p, "r", encoding="utf-8") as f:
+                return Response(content=f.read(), media_type="application/javascript")
+    return Response(content="", media_type="application/javascript")
+
 @app.get("/", response_class=HTMLResponse)
 def index_page():
     candidate_paths = [
