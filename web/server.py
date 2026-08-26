@@ -403,6 +403,7 @@ def get_js():
     return Response(content="", media_type="application/javascript")
 
 @app.get("/", response_class=HTMLResponse)
+@app.get("/api/index.py", response_class=HTMLResponse)
 def index_page():
     candidate_paths = [
         os.path.join(STATIC_DIR, "index.html"),
