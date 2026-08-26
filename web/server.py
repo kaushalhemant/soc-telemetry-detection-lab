@@ -386,7 +386,11 @@ def index_page():
     ]
     for path in candidate_paths:
         if os.path.exists(path) and os.path.isfile(path):
-            return FileResponse(path)
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    return HTMLResponse(content=f.read())
+            except Exception as e:
+                print(f"[Index Read Error] {e}")
             
     return HTMLResponse("<!DOCTYPE html><html><head><title>SOC Lab Engine</title></head><body><h2>SOC Telemetry Detection Lab Engine API Active</h2><p>API status: OK</p></body></html>")
 
