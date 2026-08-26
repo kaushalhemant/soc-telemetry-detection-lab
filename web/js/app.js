@@ -239,14 +239,26 @@ async function triggerScenario(scenarioType) {
       body: JSON.stringify({ scenario: scenarioType })
     });
     if (res.ok) {
-      setTimeout(async () => {
-        await fetchInitialData();
-        await fetchMetrics();
-      }, 150);
+      const data = await res.json();
+      if (data.alerts) activeAlerts = data.alerts;
+      if (data.telemetry) {
+        document.getElementById("log-console").innerHTML = "";
+        data.telemetry.reverse().forEach(appendTelemetryLog);
+      }
+      if (data.metrics) updateMetricsUi(data.metrics);
+      renderAlerts();
     }
   } catch (err) {
     console.error("[Trigger Scenario Error]", err);
   }
+}
+
+function updateMetricsUi(data) {
+  if (!data) return;
+  document.getElementById("metric-precision").innerText = `${data.precision_pct.toFixed(1)}%`;
+  document.getElementById("metric-recall").innerText = `${data.recall_pct.toFixed(1)}%`;
+  document.getElementById("metric-fpr").innerText = `${data.false_positive_rate_pct.toFixed(2)}%`;
+  document.getElementById("metric-mttd").innerText = `${data.mttd_ms} ms`;
 }
 
 async function clearAlerts() {

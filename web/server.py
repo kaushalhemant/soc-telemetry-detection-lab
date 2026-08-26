@@ -158,7 +158,10 @@ def trigger_simulation(req: SimulationRequest):
     return {
         "status": "success",
         "scenario": req.scenario,
-        "emitted_events_count": len(events)
+        "emitted_events_count": len(events),
+        "alerts": [a.dict() for a in detection_engine.alert_manager.get_all_alerts(50)],
+        "telemetry": recent_logs[:50],
+        "metrics": detection_engine.metrics_engine.get_summary()
     }
 
 @app.get("/api/telemetry")
