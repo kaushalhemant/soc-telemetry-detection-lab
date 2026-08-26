@@ -18,8 +18,15 @@ app = FastAPI(title="SOC Telemetry Detection Lab Engine API", version="1.0.0")
 # Base directory paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
-RULES_DIR = os.path.join(PROJECT_ROOT, "rules")
-STATIC_DIR = os.path.join(BASE_DIR)
+
+candidate_rules_dirs = [
+    os.path.join(PROJECT_ROOT, "rules"),
+    os.path.join(BASE_DIR, "..", "rules"),
+    os.path.join(os.getcwd(), "rules"),
+    os.path.join(os.getcwd(), "web", "rules"),
+]
+RULES_DIR = next((d for d in candidate_rules_dirs if os.path.exists(d) and os.path.isdir(d)), candidate_rules_dirs[0])
+STATIC_DIR = BASE_DIR
 
 # Core Lab Components
 telemetry_gen = TelemetryGenerator()
@@ -88,12 +95,18 @@ detection_engine.register_alert_listener(sync_alert_broadcast)
 @app.on_event("startup")
 def startup_event():
     global MAIN_LOOP
-    MAIN_LOOP = asyncio.get_running_loop()
-    telemetry_gen.start_background_stream(interval_seconds=4.0)
+    try:
+        MAIN_LOOP = asyncio.get_running_loop()
+    except Exception:
+        pass
+    # Avoid starting continuous background threads in Vercel serverless environment
+    if not os.environ.get("VERCEL"):
+        telemetry_gen.start_background_stream(interval_seconds=4.0)
 
 @app.on_event("shutdown")
 def shutdown_event():
-    telemetry_gen.stop_background_stream()
+    if not os.environ.get("VERCEL"):
+        telemetry_gen.stop_background_stream()
 
 # API Endpoints
 class SimulationRequest(BaseModel):
@@ -348,11 +361,25 @@ async def websocket_endpoint(websocket: WebSocket):
         ws_manager.disconnect(websocket)
 
 # Mount static web UI files
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+if os.path.exists(STATIC_DIR):
+    try:
+        app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    except Exception as e:
+        print(f"[StaticFiles Mount Warning] {e}")
 
 @app.get("/", response_class=HTMLResponse)
 def index_page():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    candidate_paths = [
+        os.path.join(STATIC_DIR, "index.html"),
+        os.path.join(PROJECT_ROOT, "web", "index.html"),
+        os.path.join(os.getcwd(), "web", "index.html"),
+        os.path.join(os.getcwd(), "index.html"),
+    ]
+    for path in candidate_paths:
+        if os.path.exists(path) and os.path.isfile(path):
+            return FileResponse(path)
+            
+    return HTMLResponse("<!DOCTYPE html><html><head><title>SOC Lab Engine</title></head><body><h2>SOC Telemetry Detection Lab Engine API Active</h2><p>API status: OK</p></body></html>")
 
 if __name__ == "__main__":
     import uvicorn

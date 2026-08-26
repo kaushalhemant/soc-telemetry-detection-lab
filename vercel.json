@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "web/server.py": {
+      "includeFiles": "rules/**,web/**"
+    }
+  }
+}

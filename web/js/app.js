@@ -16,6 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
   fetchInitialData();
   fetchMetrics();
   setInterval(fetchMetrics, 3000);
+  setInterval(fetchInitialData, 5000);
 });
 
 function initWebSocket() {
