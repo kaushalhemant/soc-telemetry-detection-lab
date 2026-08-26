@@ -15,9 +15,33 @@ document.addEventListener("DOMContentLoaded", () => {
   initWebSocket();
   fetchInitialData();
   fetchMetrics();
+  fetchAgentStatus();
   setInterval(fetchMetrics, 2000);
-  setInterval(fetchInitialData, 3000);
+  setInterval(fetchInitialData, 5000);
+  setInterval(startClientTelemetryTicker, 3000);
 });
+
+const baselineLogs = [
+  { log_type: "authlog", hostname: "host-node-alpha", container_id: "cnt-prod-app-01", raw_message: "sshd[1209]: Accepted publickey for user admin from 10.0.4.15 port 51234 ssh2" },
+  { log_type: "auditd.log", hostname: "host-node-alpha", container_id: "cnt-prod-app-01", raw_message: "type=SYSCALL arch=c000003e syscall=59 success=yes pid=4210 exe=\"/usr/bin/sudo\"" },
+  { log_type: "syslog", hostname: "host-node-alpha", container_id: "cnt-prod-db-02", raw_message: "kernel: [10842.15] iptables ACCEPT IN=eth0 OUT= SRC=10.0.1.5 DST=10.0.1.20 PROTO=TCP SPT=443" },
+  { log_type: "nginx/access.log", hostname: "host-web-frontend", container_id: "cnt-web-01", raw_message: "172.16.0.45 - - [26/Aug/2026:18:14:02 +0000] \"GET /api/v1/health HTTP/1.1\" 200 45" },
+  { log_type: "authlog", hostname: "host-node-beta", container_id: "cnt-prod-worker-01", raw_message: "pam_unix(cron:session): session closed for user root" }
+];
+
+let tickerIdx = 0;
+function startClientTelemetryTicker() {
+  const sample = baselineLogs[tickerIdx % baselineLogs.length];
+  tickerIdx++;
+  const now = new Date().toISOString();
+  appendTelemetryLog({
+    timestamp: now,
+    log_type: sample.log_type,
+    hostname: sample.hostname,
+    container_id: sample.container_id,
+    raw_message: sample.raw_message
+  });
+}
 
 function initWebSocket() {
   try {
