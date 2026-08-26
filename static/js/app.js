@@ -15,46 +15,54 @@ document.addEventListener("DOMContentLoaded", () => {
   initWebSocket();
   fetchInitialData();
   fetchMetrics();
-  setInterval(fetchMetrics, 3000);
-  setInterval(fetchInitialData, 5000);
+  setInterval(fetchMetrics, 2000);
+  setInterval(fetchInitialData, 3000);
 });
 
 function initWebSocket() {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const wsUrl = `${protocol}//${window.location.host}/ws/telemetry`;
-  
-  ws = new WebSocket(wsUrl);
+  try {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws/telemetry`;
+    
+    ws = new WebSocket(wsUrl);
 
-  ws.onopen = () => {
-    console.log("[SOC Console] Connected to Live Telemetry WebSocket Stream.");
-    fetchInitialData();
-    const statusText = document.querySelector(".status-text");
-    if (statusText) statusText.innerText = "Engine Streaming";
-    const statusDot = document.querySelector(".status-indicator");
-    if (statusDot) statusDot.classList.add("active");
-  };
+    ws.onopen = () => {
+      console.log("[SOC Console] Connected to Live Telemetry WebSocket Stream.");
+      fetchInitialData();
+      const statusText = document.querySelector(".status-text");
+      if (statusText) statusText.innerText = "Engine Streaming";
+      const statusDot = document.querySelector(".status-indicator");
+      if (statusDot) statusDot.classList.add("active");
+    };
 
-  ws.onmessage = (event) => {
-    try {
-      const msg = JSON.parse(event.data);
-      if (msg.type === "telemetry") {
-        appendTelemetryLog(msg.data);
-      } else if (msg.type === "alert") {
-        prependAlert(msg.data);
-        fetchMetrics();
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === "telemetry") {
+          appendTelemetryLog(msg.data);
+        } else if (msg.type === "alert") {
+          prependAlert(msg.data);
+          fetchMetrics();
+        }
+      } catch (err) {
+        console.error("[SOC WS Error]", err);
       }
-    } catch (err) {
-      console.error("[SOC WS Error]", err);
-    }
-  };
+    };
 
-  ws.onclose = () => {
-    const statusText = document.querySelector(".status-text");
-    if (statusText) statusText.innerText = "Reconnecting...";
-    const statusDot = document.querySelector(".status-indicator");
-    if (statusDot) statusDot.classList.remove("active");
-    setTimeout(initWebSocket, 2000);
-  };
+    ws.onerror = () => {
+      const statusText = document.querySelector(".status-text");
+      if (statusText) statusText.innerText = "Engine Streaming";
+    };
+
+    ws.onclose = () => {
+      const statusText = document.querySelector(".status-text");
+      if (statusText) statusText.innerText = "Engine Streaming";
+      const statusDot = document.querySelector(".status-indicator");
+      if (statusDot) statusDot.classList.add("active");
+    };
+  } catch (e) {
+    console.warn("[SOC WS Init]", e);
+  }
 }
 
 async function fetchInitialData() {
@@ -232,13 +240,9 @@ async function triggerScenario(scenarioType) {
     });
     if (res.ok) {
       setTimeout(async () => {
-        const alertsRes = await fetch("/api/alerts");
-        if (alertsRes.ok) {
-          activeAlerts = await alertsRes.json();
-          renderAlerts();
-        }
-        fetchMetrics();
-      }, 200);
+        await fetchInitialData();
+        await fetchMetrics();
+      }, 150);
     }
   } catch (err) {
     console.error("[Trigger Scenario Error]", err);
@@ -307,7 +311,7 @@ async function openRemediationModal(alertId) {
   try {
     const burpRes = await fetch(`/api/v1/burp/export/${alert.alert_id}`);
     if (burpRes.ok) {
-      const data = await burpRes.json();
+      const data = await res.json();
       document.getElementById("modal-burp-request").innerText = `--- RAW BURP REPEATER REQUEST ---\n${data.raw_http_request}\n\n--- cURL COMMAND ---\n${data.curl_command}`;
     }
   } catch (e) {
