@@ -102,18 +102,18 @@ detection_engine.register_alert_listener(sync_alert_broadcast)
 
 # Start background stream on boot
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
     global MAIN_LOOP
     try:
         MAIN_LOOP = asyncio.get_running_loop()
     except Exception:
-        pass
+        MAIN_LOOP = None
     # Avoid starting continuous background threads in Vercel serverless environment
     if not os.environ.get("VERCEL"):
         telemetry_gen.start_background_stream(interval_seconds=4.0)
 
 @app.on_event("shutdown")
-def shutdown_event():
+async def shutdown_event():
     if not os.environ.get("VERCEL"):
         telemetry_gen.stop_background_stream()
 
