@@ -100,6 +100,18 @@ def sync_alert_broadcast(alert: DetectionAlert):
 telemetry_gen.register_listener(sync_event_broadcast)
 detection_engine.register_alert_listener(sync_alert_broadcast)
 
+def seed_initial_lab_state():
+    """Seeds initial baseline telemetry and attack scenario alerts for instant rendering on serverless hosts."""
+    if len(detection_engine.alert_manager.get_all_alerts()) == 0:
+        telemetry_gen.trigger_scenario(ScenarioType.BRUTE_FORCE)
+        telemetry_gen.trigger_scenario(ScenarioType.ANOMALOUS_PROCESS)
+        telemetry_gen.trigger_scenario(ScenarioType.PRIVILEGE_ESCALATION)
+
+try:
+    seed_initial_lab_state()
+except Exception as e:
+    print(f"[Seed Lab State Warning] {e}")
+
 # Start background stream on boot
 @app.on_event("startup")
 async def startup_event():
