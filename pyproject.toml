@@ -16,3 +16,4 @@ dependencies = [
 
 [tool.vercel]
 entrypoint = "api.index:app"
+includeFiles = ["rules/**", "web/**"]
