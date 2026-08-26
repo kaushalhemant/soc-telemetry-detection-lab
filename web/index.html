@@ -154,6 +154,7 @@ body { background-color: var(--bg-dark); color: var(--text-main); font-family: v
       </div>
       <div class="badge" id="agent-status-badge">Agents: <strong>0 Live</strong></div>
       <div class="badge">Rules: <strong id="rules-count-badge">11 Loaded</strong></div>
+      <button class="btn-sm btn-warning" onclick="openManualModal()">📖 Lab User Manual & Guide</button>
       <button class="btn-sm btn-primary" id="mode-toggle-btn" onclick="toggleEngineMode()">Mode: Production Agent</button>
       <a class="btn-sm text-link" href="/api/mitre/navigator" target="_blank">ATT&CK Navigator JSON</a>
     </div>
@@ -446,6 +447,103 @@ body { background-color: var(--bg-dark); color: var(--text-main); font-family: v
 
         <div class="section-title">Recommended Incident Response Actions</div>
         <div class="remediation-box" id="modal-remediation-steps"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Manual & Feature Guide Modal -->
+  <div class="modal-overlay" id="manual-modal" onclick="closeManualModalOnOverlay(event)">
+    <div class="modal-content" style="width: 800px; max-width: 95vw;">
+      <div class="modal-header">
+        <h3>📖 SOC Telemetry Detection Lab - Interactive User Guide & Feature Manual</h3>
+        <button class="close-btn" onclick="closeManualModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="view-tab-bar" style="background: transparent; padding: 0; border-bottom: 1px solid var(--border-color);">
+          <button class="view-tab-btn active" id="mtab-quickstart" onclick="switchManualTab('quickstart')">🚀 1. Quickstart Guide (30s)</button>
+          <button class="view-tab-btn" id="mtab-threats" onclick="switchManualTab('threats')">🛡️ 2. Threat Simulators</button>
+          <button class="view-tab-btn" id="mtab-triage" onclick="switchManualTab('triage')">🔍 3. Incident Triage & Reports</button>
+          <button class="view-tab-btn" id="mtab-tools" onclick="switchManualTab('tools')">🔌 4. Wireshark & Burp Integration</button>
+          <button class="view-tab-btn" id="mtab-agent" onclick="switchManualTab('agent')">💻 5. Production Agent Ingest</button>
+        </div>
+
+        <!-- Tab 1: Quickstart -->
+        <div class="view-pane active" id="mpane-quickstart" style="padding-top: 12px; gap: 10px;">
+          <div class="section-title">What is this project?</div>
+          <p style="font-size: 12px; color: var(--text-main); line-height: 1.5;">
+            The <strong>SOC Telemetry Generation & Detection Lab Engine</strong> is a full-stack security operations center (SOC) simulation environment. It generates real-time Linux & Windows telemetry, parses SIGMA YAML rules, detects threat vectors (MITRE ATT&CK), and provides incident triage, Wireshark PCAP generation, and Burp Suite HTTP proxy integration.
+          </p>
+
+          <div class="section-title">How to test features in 3 steps:</div>
+          <div style="background: var(--card-bg); border: 1px solid var(--border-color); padding: 10px; border-radius: 6px; font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
+            <div><strong>Step 1: Execute Threat Vectors</strong><br/><span style="color: var(--text-muted);">Click any toolbar button like <code>SSH Brute Force</code>, <code>Privilege Escalation</code>, <code>LSASS Dump</code>, or <code>Kernel Driver Tampering</code>.</span></div>
+            <div><strong>Step 2: Watch Real-Time Telemetry Stream & Detections</strong><br/><span style="color: var(--text-muted);">View live authlog/syslog events streaming into the center console while newly triggered detection alert cards populate the left pane with severity colors.</span></div>
+            <div><strong>Step 3: Open Alert Triage Modal</strong><br/><span style="color: var(--text-muted);">Click any alert card in the left pane to view MITRE ATT&CK technique IDs, raw log evidence, Splunk/Elastic query conversions, and export binary <code>.pcap</code> network captures!</span></div>
+          </div>
+        </div>
+
+        <!-- Tab 2: Threat Simulators -->
+        <div class="view-pane" id="mpane-threats" style="padding-top: 12px; gap: 10px;">
+          <div class="section-title">11 Pre-Packaged Attack Vector Simulators</div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+            <div style="background: var(--card-bg); padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+              <strong style="color: #f85149;">SSH Brute Force (T1110.001)</strong><br/>
+              Simulates high-rate failed authentication attempts from attacker IPs.
+            </div>
+            <div style="background: var(--card-bg); padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+              <strong style="color: #f85149;">Anomalous Shell Spawn (T1059.004)</strong><br/>
+              Detects web server processes (<code>nginx</code>/<code>apache</code>) executing reverse shell binaries.
+            </div>
+            <div style="background: var(--card-bg); padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+              <strong style="color: #f85149;">Privilege Escalation (T1548.001)</strong><br/>
+              Detects unauthorized SUID binary execution and root shell elevation.
+            </div>
+            <div style="background: var(--card-bg); padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+              <strong style="color: #f85149;">Process Hollowing (T1055.012)</strong><br/>
+              Detects memory unmapping and code injection into suspended processes.
+            </div>
+            <div style="background: var(--card-bg); padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+              <strong style="color: #f85149;">BYOVD Kernel Tampering (T1068)</strong><br/>
+              Detects vulnerable signed kernel drivers disabling EDR security callbacks.
+            </div>
+            <div style="background: var(--card-bg); padding: 8px; border-radius: 4px; border: 1px solid var(--border-color);">
+              <strong style="color: #f85149;">LSASS Memory Dump (T1003.001)</strong><br/>
+              Detects credential extraction targeting <code>lsass.exe</code> via <code>comsvcs.dll</code>.
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 3: Triage & Reports -->
+        <div class="view-pane" id="mpane-triage" style="padding-top: 12px; gap: 10px;">
+          <div class="section-title">SOC Incident Response Capabilities</div>
+          <ul style="font-size: 12px; color: var(--text-main); padding-left: 18px; line-height: 1.6;">
+            <li><strong>Stateful Triage Pipeline</strong>: Move alerts across <code>NEW</code> &rarr; <code>INVESTIGATING</code> &rarr; <code>ESCALATED</code> &rarr; <code>CLOSED</code> statuses.</li>
+            <li><strong>Analyst Investigation Log</strong>: Add timestamped investigation notes to any active security incident.</li>
+            <li><strong>SIGMA Rule Compiler</strong>: Auto-compile detection rules to <strong>Splunk SPL</strong> and <strong>Elastic KQL</strong> query strings.</li>
+            <li><strong>JSON Incident Report Exporter</strong>: Generate standalone JSON incident audit reports for management reporting.</li>
+          </ul>
+        </div>
+
+        <!-- Tab 4: Wireshark & Burp -->
+        <div class="view-pane" id="mpane-tools" style="padding-top: 12px; gap: 10px;">
+          <div class="section-title">Forensic Integration Suite</div>
+          <div style="font-size: 12px; color: var(--text-main); line-height: 1.5;">
+            <p><strong>🦈 Wireshark PCAP Generator:</strong> Click <em>"Download Wireshark PCAP"</em> inside any alert modal to generate and download a valid binary <code>.pcap</code> file (pcap format v2.4) containing synthesized network packet headers for Wireshark analysis.</p>
+            <br/>
+            <p><strong>🟠 Burp Suite Proxy Importer & Repeater:</strong> Paste Burp Suite HTTP proxy history XML items into the <em>Tool Integrations</em> tab to parse web requests directly into the detection stream, or export raw HTTP requests formatted for Burp Repeater / cURL.</p>
+          </div>
+        </div>
+
+        <!-- Tab 5: Production Agent -->
+        <div class="view-pane" id="mpane-agent" style="padding-top: 12px; gap: 10px;">
+          <div class="section-title">Connecting Real Endpoints (Production Mode)</div>
+          <p style="font-size: 12px; color: var(--text-main); line-height: 1.5;">
+            To collect real telemetry from Linux or Windows servers into this SOC engine:
+          </p>
+          <pre class="log-code-box"># Run the lightweight endpoint collector on target host
+python agent/collector.py --server http://your-soc-engine-domain.com</pre>
+        </div>
+
       </div>
     </div>
   </div>

@@ -311,7 +311,7 @@ async function openRemediationModal(alertId) {
   try {
     const burpRes = await fetch(`/api/v1/burp/export/${alert.alert_id}`);
     if (burpRes.ok) {
-      const data = await res.json();
+      const data = await burpRes.json();
       document.getElementById("modal-burp-request").innerText = `--- RAW BURP REPEATER REQUEST ---\n${data.raw_http_request}\n\n--- cURL COMMAND ---\n${data.curl_command}`;
     }
   } catch (e) {
@@ -489,4 +489,28 @@ function closeModal(event) {
 function escapeHtml(str) {
   if (!str) return "";
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function openManualModal() {
+  document.getElementById("manual-modal").classList.add("active");
+}
+
+function closeManualModal() {
+  document.getElementById("manual-modal").classList.remove("active");
+}
+
+function closeManualModalOnOverlay(event) {
+  if (event.target.id === "manual-modal") {
+    closeManualModal();
+  }
+}
+
+function switchManualTab(tabName) {
+  document.querySelectorAll("[id^='mtab-']").forEach(btn => btn.classList.remove("active"));
+  document.querySelectorAll("[id^='mpane-']").forEach(pane => pane.classList.remove("active"));
+
+  const targetBtn = document.getElementById(`mtab-${tabName}`);
+  const targetPane = document.getElementById(`mpane-${tabName}`);
+  if (targetBtn) targetBtn.classList.add("active");
+  if (targetPane) targetPane.classList.add("active");
 }
