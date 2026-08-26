@@ -6,6 +6,15 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 
+import sys
+
+# Ensure project root is in sys.path before importing internal modules
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(BASE_DIR)
+for p in [PROJECT_ROOT, os.getcwd()]:
+    if p and p not in sys.path:
+        sys.path.insert(0, p)
+
 from generator.models import LogEvent, DetectionAlert, ScenarioType, TriageStatus
 from generator.log_generator import TelemetryGenerator
 from engine.detection_engine import DetectionEngine
