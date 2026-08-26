@@ -1,0 +1,9 @@
+[project]
+name = "soc-telemetry-detection-lab"
+version = "0.1.0"
+description = "SOC Telemetry Generation & Detection Lab Engine API"
+readme = "README.md"
+requires-python = ">=3.9"
+
+[tool.vercel]
+entrypoint = "web.server:app"
