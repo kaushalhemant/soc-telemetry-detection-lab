@@ -136,6 +136,26 @@ body { background-color: var(--bg-dark); color: var(--text-main); font-family: v
 .apt-title { font-size: 14px; font-weight: 700; color: var(--text-bright); }
 .apt-meta { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
 .apt-desc { font-size: 12px; color: var(--text-main); line-height: 1.4; }
+.devices-container { padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+.devices-banner { background: linear-gradient(135deg, rgba(31, 111, 235, 0.15), rgba(56, 189, 248, 0.05)); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 6px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; }
+.devices-banner-title { font-size: 13px; font-weight: 700; color: #38bdf8; display: flex; align-items: center; gap: 8px; }
+.devices-banner-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.devices-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+.device-card { background-color: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px; position: relative; transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
+.device-card:hover { transform: translateY(-2px); border-color: #388bfd; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); }
+.device-card.self-client { border-color: rgba(56, 189, 248, 0.4); background: linear-gradient(180deg, #21262d, #1a202c); }
+.device-header { display: flex; justify-content: space-between; align-items: flex-start; }
+.device-title-group { display: flex; flex-direction: column; gap: 2px; }
+.device-name { font-size: 14px; font-weight: 700; color: var(--text-bright); }
+.device-type-tag { font-family: var(--font-mono); font-size: 11px; color: #58a6ff; }
+.pulse-badge { display: inline-flex; align-items: center; gap: 6px; background-color: rgba(63, 185, 80, 0.15); border: 1px solid #3fb950; color: #3fb950; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+.radar-dot { width: 6px; height: 6px; background-color: #3fb950; border-radius: 50%; box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.7); animation: radar-pulse 1.8s infinite; }
+@keyframes radar-pulse { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(63, 185, 80, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(63, 185, 80, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(63, 185, 80, 0); } }
+.device-specs-table { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background-color: #12161f; border: 1px solid var(--border-color); padding: 8px 10px; border-radius: 6px; font-size: 11px; }
+.spec-entry { display: flex; flex-direction: column; gap: 1px; }
+.spec-k { color: var(--text-muted); font-size: 10px; text-transform: uppercase; }
+.spec-v { color: var(--text-bright); font-family: var(--font-mono); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.device-footer { display: flex; justify-content: space-between; align-items: center; font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 8px; }
   </style>
 </head>
 <body>
@@ -152,10 +172,11 @@ body { background-color: var(--bg-dark); color: var(--text-main); font-family: v
         <span class="dot"></span>
         <span class="status-text">Engine Streaming</span>
       </div>
-      <div class="badge" id="agent-status-badge">Agents: <strong>0 Live</strong></div>
+      <div class="badge" id="agent-status-badge">Endpoints: <strong id="devices-count-badge">1 Live</strong></div>
+      <div class="badge" id="current-client-badge" style="border-color: #388bfd; color: #58a6ff;">This Device: <strong id="my-device-name">Acquiring...</strong></div>
       <div class="badge">Rules: <strong id="rules-count-badge">11 Loaded</strong></div>
       <button class="btn-sm btn-warning" onclick="openManualModal()">📖 Lab User Manual & Guide</button>
-      <button class="btn-sm btn-primary" id="mode-toggle-btn" onclick="toggleEngineMode()">Mode: Production Agent</button>
+      <button class="btn-sm btn-primary" id="mode-toggle-btn" onclick="toggleEngineMode()">Mode: Live Production Ingest</button>
       <a class="btn-sm text-link" href="/api/mitre/navigator" target="_blank">ATT&CK Navigator JSON</a>
     </div>
   </header>
@@ -165,6 +186,7 @@ body { background-color: var(--bg-dark); color: var(--text-main); font-family: v
     <button class="view-tab-btn active" id="tab-standard" onclick="switchConsoleView('standard')">🌐 Standard Telemetry Console</button>
     <button class="view-tab-btn" id="tab-uncommon" onclick="switchConsoleView('uncommon')">⚠️ Uncommon & Advanced Threats Matrix</button>
     <button class="view-tab-btn" id="tab-tools" onclick="switchConsoleView('tools')">🔌 Tool Integrations (Wireshark & Burp Suite)</button>
+    <button class="view-tab-btn" id="tab-devices" onclick="switchConsoleView('devices')">📡 Monitored Endpoints & Devices (<span id="tab-device-count">1</span>)</button>
   </div>
 
   <!-- Metrics Bar -->
@@ -382,6 +404,37 @@ body { background-color: var(--bg-dark); color: var(--text-main); font-family: v
         </div>
       </section>
     </main>
+  </div>
+
+  <!-- View 4: Dedicated Live Monitored Devices & Endpoints Matrix -->
+  <div id="view-devices" class="view-pane">
+    <section class="control-panel uncommon-panel">
+      <span class="toolbar-label">Autonomous Device Telemetry Network:</span>
+      <span class="text-muted" style="font-size: 11px;">Real-time continuous monitoring of all active server nodes, python agents, and connected client browsers</span>
+      <div style="margin-left: auto; display: flex; gap: 8px;">
+        <button class="btn btn-sm btn-primary" onclick="fetchDevices()">🔄 Refresh Devices</button>
+      </div>
+    </section>
+
+    <div class="devices-container">
+      <div class="devices-banner">
+        <div>
+          <div class="devices-banner-title">
+            <span class="radar-dot"></span> Autonomous Live Telemetry & Device Acquisition Network
+          </div>
+          <div class="devices-banner-desc">
+            All connected devices, host servers, and client browsers automatically stream telemetry heartbeats, hardware specs, process metrics, and security logs into the detection engine in real-time.
+          </div>
+        </div>
+        <div class="pulse-badge" id="network-health-badge">
+          <span class="radar-dot"></span> ALL ENDPOINTS ONLINE
+        </div>
+      </div>
+
+      <div class="devices-grid" id="monitored-devices-grid">
+        <!-- Live device cards populated dynamically -->
+      </div>
+    </div>
   </div>
 
   <!-- Alert Triage & Remediation Modal -->

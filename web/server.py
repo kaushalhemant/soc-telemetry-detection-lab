@@ -15,19 +15,24 @@ for p in [PROJECT_ROOT, os.getcwd()]:
     if p and p not in sys.path:
         sys.path.insert(0, p)
 
-from generator.models import LogEvent, DetectionAlert, ScenarioType, TriageStatus
+from generator.models import LogEvent, DetectionAlert, ScenarioType, TriageStatus, LogType
 from generator.log_generator import TelemetryGenerator
 from engine.detection_engine import DetectionEngine
 from engine.exporter import SigmaExporter
 from engine.pcap_analyzer import PcapAnalyzer
 from engine.burp_integrator import BurpIntegrator
 
-app = FastAPI(title="SOC Telemetry Detection Lab Engine API", version="1.0.0")
+from contextlib import asynccontextmanager
+
+def to_dict(obj):
+    """Safely converts Pydantic models to dict across v1 and v2."""
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump()
+    elif hasattr(obj, "dict"):
+        return obj.dict()
+    return dict(obj)
 
 # Base directory paths
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(BASE_DIR)
-
 candidate_rules_dirs = [
     os.path.join(PROJECT_ROOT, "rules"),
     os.path.join(BASE_DIR, "..", "rules"),
@@ -69,11 +74,10 @@ class ConnectionManager:
 
 ws_manager = ConnectionManager()
 recent_logs: List[dict] = []
-
 MAIN_LOOP = None
 
 def sync_event_broadcast(event: LogEvent):
-    evt_dict = event.dict()
+    evt_dict = to_dict(event)
     recent_logs.insert(0, evt_dict)
     if len(recent_logs) > 200:
         recent_logs.pop()
@@ -87,7 +91,7 @@ def sync_event_broadcast(event: LogEvent):
             print(f"[WS Telemetry Error] {e}")
 
 def sync_alert_broadcast(alert: DetectionAlert):
-    alt_dict = alert.dict()
+    alt_dict = to_dict(alert)
     if MAIN_LOOP and MAIN_LOOP.is_running():
         try:
             asyncio.run_coroutine_threadsafe(
@@ -112,9 +116,8 @@ try:
 except Exception as e:
     print(f"[Seed Lab State Warning] {e}")
 
-# Start background stream on boot
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global MAIN_LOOP
     try:
         MAIN_LOOP = asyncio.get_running_loop()
@@ -123,11 +126,11 @@ async def startup_event():
     # Avoid starting continuous background threads in Vercel serverless environment
     if not os.environ.get("VERCEL"):
         telemetry_gen.start_background_stream(interval_seconds=4.0)
-
-@app.on_event("shutdown")
-async def shutdown_event():
+    yield
     if not os.environ.get("VERCEL"):
         telemetry_gen.stop_background_stream()
+
+app = FastAPI(title="SOC Telemetry Detection Lab Engine API", version="1.0.0", lifespan=lifespan)
 
 # API Endpoints
 class SimulationRequest(BaseModel):
@@ -159,7 +162,7 @@ def trigger_simulation(req: SimulationRequest):
         "status": "success",
         "scenario": req.scenario,
         "emitted_events_count": len(events),
-        "alerts": [a.dict() for a in detection_engine.alert_manager.get_all_alerts(50)],
+        "alerts": [to_dict(a) for a in detection_engine.alert_manager.get_all_alerts(50)],
         "telemetry": recent_logs[:50],
         "metrics": detection_engine.metrics_engine.get_summary()
     }
@@ -170,21 +173,21 @@ def get_recent_telemetry(limit: int = 50):
 
 @app.get("/api/alerts")
 def get_alerts(limit: int = 50):
-    return [a.dict() for a in detection_engine.alert_manager.get_all_alerts(limit)]
+    return [to_dict(a) for a in detection_engine.alert_manager.get_all_alerts(limit)]
 
 @app.post("/api/alerts/{alert_id}/triage")
 def update_alert_triage(alert_id: str, req: TriageRequest):
     alert = detection_engine.alert_manager.update_triage_status(alert_id, req.status, req.note)
     if not alert:
         raise HTTPException(status_code=404, detail="Alert ID not found")
-    return alert.dict()
+    return to_dict(alert)
 
 @app.post("/api/alerts/{alert_id}/tune")
 def tune_alert_rule(alert_id: str):
     alert = detection_engine.alert_manager.tune_alert_rule(alert_id)
     if not alert:
         raise HTTPException(status_code=404, detail="Alert ID not found")
-    return alert.dict()
+    return to_dict(alert)
 
 @app.get("/api/metrics")
 def get_metrics():
@@ -210,14 +213,226 @@ def export_rule(rule_id: str):
 def get_mitre_navigator_layer():
     return SigmaExporter.generate_mitre_navigator_layer(detection_engine.rules)
 
-# Ingestion & Agent Tracking State
+# Ingestion, Device Tracking & Autonomous Monitoring State
 active_agents: dict = {}
+active_devices: dict = {}
 ingested_events_count: int = 0
+
+def get_utc_now_str() -> str:
+    import datetime
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+def register_server_host_device():
+    """Automatically acquires and registers the server host machine details on boot."""
+    import platform
+    import socket
+    import getpass
+    import os
+    hostname = socket.gethostname()
+    ip = "127.0.0.1"
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        try:
+            ip = socket.gethostbyname(hostname)
+        except Exception:
+            pass
+
+    ram_gb = 0
+    try:
+        import psutil
+        ram_gb = round(psutil.virtual_memory().total / (1024 ** 3), 1)
+    except Exception:
+        pass
+
+    dev_id = f"host-{hostname.lower()}"
+    active_devices[dev_id] = {
+        "device_id": dev_id,
+        "device_type": "Host Server Engine (Live)",
+        "hostname": hostname,
+        "os": f"{platform.system()} {platform.release()} ({platform.machine()})",
+        "browser": "Engine Service",
+        "ip_address": ip,
+        "cpu_cores": os.cpu_count() or 1,
+        "device_memory_gb": ram_gb,
+        "screen_res": "Server Core",
+        "user": getpass.getuser(),
+        "status": "ONLINE",
+        "first_seen": get_utc_now_str(),
+        "last_seen": get_utc_now_str(),
+        "events_count": 0
+    }
+
+try:
+    register_server_host_device()
+except Exception as e:
+    print(f"[Device Auto-Registration Warning] {e}")
 
 class IngestBatchRequest(BaseModel):
     agent_id: str = "agent-local"
     hostname: str = "production-node-01"
+    device_info: dict = None
     events: List[dict]
+
+class ClientDeviceRegisterRequest(BaseModel):
+    device_id: str
+    device_type: str = "Client Browser Endpoint"
+    hostname: str = "Client Device"
+    os: str = "Unknown OS"
+    browser: str = "Unknown Browser"
+    ip_address: str = "127.0.0.1"
+    cpu_cores: int = 1
+    device_memory_gb: float = 0.0
+    screen_res: str = "Unknown"
+    user: str = "analyst"
+    status: str = "ONLINE"
+    extra: dict = {}
+
+class ClientTelemetryBatchRequest(BaseModel):
+    device_id: str
+    hostname: str = "Client Browser"
+    events: List[dict]
+
+def resolve_log_type(raw_type: str) -> LogType:
+    """Safely maps incoming telemetry strings to known LogType enums."""
+    if not raw_type:
+        return LogType.AUDITD
+    try:
+        return LogType(raw_type)
+    except ValueError:
+        raw_lower = str(raw_type).lower()
+        if "client" in raw_lower:
+            return LogType.CLIENT_TELEMETRY
+        if "browser" in raw_lower:
+            return LogType.BROWSER
+        if "syslog" in raw_lower:
+            return LogType.SYSLOG
+        if "auth" in raw_lower:
+            return LogType.AUTH
+        if "access" in raw_lower or "nginx" in raw_lower or "http" in raw_lower:
+            return LogType.WEB_ACCESS
+        return LogType.AUDITD
+
+@app.post("/api/v1/client-device/register")
+def register_client_device(payload: ClientDeviceRegisterRequest):
+    """
+    Registers a newly connected client browser / user device opening the SOC Console.
+    Acquires hardware, OS, and browser parameters for continuous monitoring.
+    """
+    now = get_utc_now_str()
+    is_new = payload.device_id not in active_devices
+    
+    active_devices[payload.device_id] = {
+        "device_id": payload.device_id,
+        "device_type": payload.device_type,
+        "hostname": payload.hostname,
+        "os": payload.os,
+        "browser": payload.browser,
+        "ip_address": payload.ip_address,
+        "cpu_cores": payload.cpu_cores,
+        "device_memory_gb": payload.device_memory_gb,
+        "screen_res": payload.screen_res,
+        "user": payload.user,
+        "status": payload.status,
+        "first_seen": active_devices.get(payload.device_id, {}).get("first_seen", now),
+        "last_seen": now,
+        "events_count": active_devices.get(payload.device_id, {}).get("events_count", 0),
+        "extra": payload.extra
+    }
+
+    # Emit an audit registration event into the telemetry stream
+    import uuid
+    reg_evt = LogEvent(
+        id=str(uuid.uuid4()),
+        timestamp=now,
+        log_type=LogType.CLIENT_TELEMETRY,
+        hostname=payload.hostname,
+        source_ip=payload.ip_address,
+        user=payload.user,
+        process_name="Browser Client Daemon",
+        process_id=os.getpid() if hasattr(os, "getpid") else 1001,
+        event_id="CLIENT_DEVICE_DISCOVERED" if is_new else "CLIENT_DEVICE_HEARTBEAT",
+        raw_message=f"Endpoint discovered: [{payload.hostname}] running {payload.os} via {payload.browser} ({payload.cpu_cores} Cores, {payload.screen_res})",
+        details={
+            "device_id": payload.device_id,
+            "os": payload.os,
+            "browser": payload.browser,
+            "screen": payload.screen_res,
+            "cores": payload.cpu_cores
+        }
+    )
+    detection_engine.process_event(reg_evt)
+    sync_event_broadcast(reg_evt)
+
+    return {
+        "status": "success",
+        "message": "Device acquired and monitoring active.",
+        "device_id": payload.device_id,
+        "total_active_devices": len(active_devices)
+    }
+
+@app.post("/api/v1/client-device/telemetry")
+def ingest_client_telemetry(payload: ClientTelemetryBatchRequest):
+    """
+    Ingests continuous telemetry streamed automatically from connected user browsers / devices.
+    """
+    global ingested_events_count
+    import uuid
+    now = get_utc_now_str()
+
+    if payload.device_id in active_devices:
+        active_devices[payload.device_id]["last_seen"] = now
+        active_devices[payload.device_id]["events_count"] = active_devices[payload.device_id].get("events_count", 0) + len(payload.events)
+
+    processed_events = []
+    for evt_dict in payload.events:
+        try:
+            log_evt = LogEvent(
+                id=evt_dict.get("id") or str(uuid.uuid4()),
+                timestamp=evt_dict.get("timestamp") or now,
+                log_type=resolve_log_type(evt_dict.get("log_type", "browser.log")),
+                hostname=payload.hostname,
+                source_ip=evt_dict.get("source_ip", active_devices.get(payload.device_id, {}).get("ip_address", "127.0.0.1")),
+                user=evt_dict.get("user", active_devices.get(payload.device_id, {}).get("user", "analyst")),
+                process_name=evt_dict.get("process_name", "web-client"),
+                process_id=evt_dict.get("process_id", 0),
+                parent_process_name=evt_dict.get("parent_process_name"),
+                command_line=evt_dict.get("command_line", ""),
+                event_id=evt_dict.get("event_id", "CLIENT_TELEMETRY"),
+                raw_message=evt_dict.get("raw_message") or f"Client telemetry event on {payload.hostname}",
+                details=evt_dict.get("details", {})
+            )
+            detection_engine.process_event(log_evt)
+            sync_event_broadcast(log_evt)
+            processed_events.append(log_evt)
+            ingested_events_count += 1
+        except Exception as err:
+            print(f"[Client Telemetry Error] {err}")
+
+    return {
+        "status": "success",
+        "device_id": payload.device_id,
+        "ingested_count": len(processed_events)
+    }
+
+@app.get("/api/v1/devices")
+def get_monitored_devices():
+    """
+    Returns all actively monitored endpoints (Host Server, Python Agents, and User Client Browsers).
+    """
+    now = get_utc_now_str()
+    # Refresh server host last_seen
+    for dev_id, dev in active_devices.items():
+        if dev.get("device_type", "").startswith("Host Server"):
+            dev["last_seen"] = now
+
+    return {
+        "active_devices_count": len(active_devices),
+        "devices": list(active_devices.values())
+    }
 
 @app.post("/api/v1/ingest")
 def ingest_live_telemetry(payload: IngestBatchRequest):
@@ -226,13 +441,34 @@ def ingest_live_telemetry(payload: IngestBatchRequest):
     Ingests live host events from remote or local endpoint agents.
     """
     global ingested_events_count
-    import datetime, uuid
+    import uuid
+    now = get_utc_now_str()
 
-    # Record agent heartbeat
+    # Record agent heartbeat & specs
     active_agents[payload.agent_id] = {
         "hostname": payload.hostname,
-        "last_seen": datetime.datetime.utcnow().isoformat() + "Z",
+        "last_seen": now,
         "events_count": len(payload.events)
+    }
+
+    # Upsert into active_devices
+    dev_info = payload.device_info or {}
+    active_devices[payload.agent_id] = {
+        "device_id": payload.agent_id,
+        "device_type": dev_info.get("device_type", "Host Endpoint Agent (Python)"),
+        "hostname": payload.hostname,
+        "os": f"{dev_info.get('os_name', 'Linux/Windows')} {dev_info.get('os_release', '')} ({dev_info.get('architecture', 'x86_64')})",
+        "browser": "Native Agent Daemon",
+        "ip_address": dev_info.get("ip_address", "127.0.0.1"),
+        "cpu_cores": dev_info.get("cpu_cores", 1),
+        "device_memory_gb": dev_info.get("total_ram_gb", 0),
+        "screen_res": "Headless Daemon",
+        "user": dev_info.get("user", "SYSTEM"),
+        "status": "ONLINE",
+        "first_seen": active_devices.get(payload.agent_id, {}).get("first_seen", now),
+        "last_seen": now,
+        "events_count": active_devices.get(payload.agent_id, {}).get("events_count", 0) + len(payload.events),
+        "extra": dev_info
     }
 
     processed_events = []
@@ -241,8 +477,8 @@ def ingest_live_telemetry(payload: IngestBatchRequest):
             # Map external dictionary payload to standardized LogEvent model
             log_evt = LogEvent(
                 id=evt_dict.get("id") or str(uuid.uuid4()),
-                timestamp=evt_dict.get("timestamp") or (datetime.datetime.utcnow().isoformat() + "Z"),
-                log_type=evt_dict.get("log_type", "auditd.log"),
+                timestamp=evt_dict.get("timestamp") or now,
+                log_type=resolve_log_type(evt_dict.get("log_type", "auditd.log")),
                 hostname=payload.hostname,
                 container_id=evt_dict.get("container_id"),
                 source_ip=evt_dict.get("source_ip"),
@@ -272,17 +508,18 @@ def ingest_live_telemetry(payload: IngestBatchRequest):
 @app.get("/api/v1/agent/status")
 def get_agent_status():
     """Returns heartbeat and live telemetry ingestion statistics."""
-    count = max(1, len(active_agents))
-    agents_list = list(active_agents.values()) if active_agents else [{
-        "agent_id": "host-node-alpha",
+    count = max(1, len(active_devices))
+    devices_list = list(active_devices.values()) if active_devices else [{
+        "device_id": "host-node-alpha",
         "hostname": "host-node-alpha",
         "os": "Linux 5.15.0-88-generic (Ubuntu 22.04 LTS)",
         "ip_address": "10.0.4.15",
-        "status": "ACTIVE"
+        "status": "ONLINE"
     }]
     return {
         "active_agents_count": count,
-        "agents": agents_list,
+        "agents": devices_list,
+        "devices": devices_list,
         "total_ingested_events": ingested_events_count + 142
     }
 
@@ -335,7 +572,7 @@ def export_wireshark_pcap(alert_id: str):
     if not alert:
         raise HTTPException(status_code=404, detail="Alert ID not found")
     
-    pcap_bytes = PcapAnalyzer.generate_pcap_bytes(alert.dict())
+    pcap_bytes = PcapAnalyzer.generate_pcap_bytes(to_dict(alert))
     return Response(
         content=pcap_bytes,
         media_type="application/vnd.tcpdump.pcap",
@@ -349,7 +586,7 @@ def export_burp_repeater_request(alert_id: str):
     if not alert:
         raise HTTPException(status_code=404, detail="Alert ID not found")
     
-    return BurpIntegrator.export_burp_repeater(alert.dict())
+    return BurpIntegrator.export_burp_repeater(to_dict(alert))
 
 class BurpIngestRequest(BaseModel):
     xml_content: str

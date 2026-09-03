@@ -8,6 +8,9 @@ class LogType(str, Enum):
     AUDITD = "auditd.log"
     SYSLOG = "syslog"
     WEB_ACCESS = "web_access.log"
+    CLIENT_TELEMETRY = "client.telemetry"
+    BROWSER = "browser.log"
+
 
 class SeverityLevel(str, Enum):
     INFORMATIONAL = "INFORMATIONAL"

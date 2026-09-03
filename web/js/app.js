@@ -1,9 +1,12 @@
 let totalTelemetryCount = 0;
 let activeAlerts = [];
 let activeRules = [];
+let activeDevicesList = [];
 let currentFilter = "ALL";
 let selectedAlertId = null;
 let ws = null;
+let currentClientDeviceId = null;
+let currentClientInfo = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   if (window.location.protocol === "file:") {
@@ -12,12 +15,19 @@ document.addEventListener("DOMContentLoaded", () => {
     banner.innerHTML = "⚠️ DETECTED LOCAL FILE OPENING (file://)! You must type <a href='http://127.0.0.1:8000' style='color: #fff; text-decoration: underline;'>http://127.0.0.1:8000</a> in your browser address bar to connect to the live backend server.";
     document.body.prepend(banner);
   }
+
+  // 1. Acquire client device details and activate autonomous monitoring immediately
+  initAutonomousClientDevice();
+
+  // 2. Initialize live streaming & data polling
   initWebSocket();
   fetchInitialData();
   fetchMetrics();
-  fetchAgentStatus();
+  fetchDevices();
+
   setInterval(fetchMetrics, 2000);
   setInterval(fetchInitialData, 5000);
+  setInterval(fetchDevices, 3000);
   setInterval(startClientTelemetryTicker, 3000);
 
   // Auto-show Quickstart & Connection Manual on first visit
@@ -25,6 +35,129 @@ document.addEventListener("DOMContentLoaded", () => {
     setTimeout(openManualModal, 400);
   }
 });
+
+function getClientOS() {
+  const ua = navigator.userAgent;
+  if (ua.indexOf("Win") !== -1) return "Windows 11/10 (x64)";
+  if (ua.indexOf("Mac") !== -1) return "macOS (Apple Silicon/Intel)";
+  if (ua.indexOf("Android") !== -1) return "Android OS";
+  if (ua.indexOf("iPhone") !== -1 || ua.indexOf("iPad") !== -1) return "iOS Mobile";
+  if (ua.indexOf("Linux") !== -1) return "Linux Desktop/Server";
+  return navigator.platform || "Standard OS";
+}
+
+function getClientBrowser() {
+  const ua = navigator.userAgent;
+  if (ua.indexOf("Edg") !== -1) return "Microsoft Edge";
+  if (ua.indexOf("Chrome") !== -1) return "Google Chrome";
+  if (ua.indexOf("Firefox") !== -1) return "Mozilla Firefox";
+  if (ua.indexOf("Safari") !== -1) return "Apple Safari";
+  if (ua.indexOf("OPR") !== -1 || ua.indexOf("Opera") !== -1) return "Opera Browser";
+  return "Web Browser";
+}
+
+async function initAutonomousClientDevice() {
+  let devId = localStorage.getItem("soc_client_device_id");
+  if (!devId) {
+    devId = "client-" + Math.random().toString(36).substring(2, 8);
+    localStorage.setItem("soc_client_device_id", devId);
+  }
+  currentClientDeviceId = devId;
+
+  const os = getClientOS();
+  const browser = getClientBrowser();
+  const cores = navigator.hardwareConcurrency || 4;
+  const memoryGb = navigator.deviceMemory || 8;
+  const screenRes = `${window.screen.width}x${window.screen.height} (${window.devicePixelRatio || 1}x)`;
+  const conn = navigator.connection ? `${navigator.connection.effectiveType || '4G'} (${navigator.connection.downlink || 10} Mbps)` : 'LAN/Broadband';
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const lang = navigator.language || 'en-US';
+
+  currentClientInfo = {
+    device_id: devId,
+    device_type: "Client Browser Endpoint (Live)",
+    hostname: `${os.split(' ')[0].toLowerCase()}-${devId.slice(-4)}`,
+    os: os,
+    browser: browser,
+    ip_address: "127.0.0.1",
+    cpu_cores: cores,
+    device_memory_gb: memoryGb,
+    screen_res: screenRes,
+    user: "analyst-local",
+    status: "ONLINE",
+    extra: {
+      connection: conn,
+      timezone: timezone,
+      language: lang,
+      platform: navigator.platform
+    }
+  };
+
+  const myBadge = document.getElementById("my-device-name");
+  if (myBadge) {
+    myBadge.innerText = `${os.split(' ')[0]} / ${browser} (${cores}C, ${memoryGb}GB)`;
+  }
+
+  // Register device with SOC engine
+  try {
+    const res = await fetch("/api/v1/client-device/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(currentClientInfo)
+    });
+    if (res.ok) {
+      console.log("[SOC Agent] Client device automatically acquired & registered:", currentClientInfo);
+      fetchDevices();
+    }
+  } catch (e) {
+    console.warn("[SOC Client Register]", e);
+  }
+
+  // Start continuous autonomous client monitoring stream
+  startAutonomousClientMonitoring();
+}
+
+let clientTick = 0;
+function startAutonomousClientMonitoring() {
+  setInterval(async () => {
+    clientTick++;
+    if (!currentClientInfo) return;
+
+    const now = new Date().toISOString();
+    const isFocused = !document.hidden;
+    const heapInfo = window.performance && performance.memory ? `${Math.round(performance.memory.usedJSHeapSize / (1024 * 1024))}MB heap` : 'normal';
+
+    const evt = {
+      id: "clt-" + Math.random().toString(36).substring(2, 10),
+      timestamp: now,
+      log_type: "client.telemetry",
+      hostname: currentClientInfo.hostname,
+      source_ip: currentClientInfo.ip_address,
+      user: currentClientInfo.user,
+      process_name: currentClientInfo.browser,
+      process_id: 2100 + (clientTick % 50),
+      event_id: isFocused ? "CLIENT_HEARTBEAT" : "CLIENT_IDLE_HEARTBEAT",
+      raw_message: `client-telemetry[${currentClientInfo.device_id}]: endpoint live, active_tab=${isFocused}, memory=${heapInfo}, net=${currentClientInfo.extra.connection}`,
+      details: {
+        device_id: currentClientInfo.device_id,
+        is_focused: isFocused,
+        tick: clientTick
+      }
+    };
+
+    try {
+      await fetch("/api/v1/client-device/telemetry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          device_id: currentClientInfo.device_id,
+          hostname: currentClientInfo.hostname,
+          events: [evt]
+        })
+      });
+    } catch (e) {}
+  }, 3500);
+}
 
 const baselineLogs = [
   { log_type: "authlog", hostname: "host-node-alpha", container_id: "cnt-prod-app-01", raw_message: "sshd[1209]: Accepted publickey for user admin from 10.0.4.15 port 51234 ssh2" },
@@ -177,14 +310,18 @@ function switchConsoleView(viewName) {
   document.querySelectorAll(".view-pane").forEach(pane => pane.classList.remove("active"));
 
   if (viewName === "uncommon") {
-    document.getElementById("tab-uncommon").classList.add("active");
-    document.getElementById("view-uncommon").classList.add("active");
+    document.getElementById("tab-uncommon")?.classList.add("active");
+    document.getElementById("view-uncommon")?.classList.add("active");
   } else if (viewName === "tools") {
-    document.getElementById("tab-tools").classList.add("active");
-    document.getElementById("view-tools").classList.add("active");
+    document.getElementById("tab-tools")?.classList.add("active");
+    document.getElementById("view-tools")?.classList.add("active");
+  } else if (viewName === "devices") {
+    document.getElementById("tab-devices")?.classList.add("active");
+    document.getElementById("view-devices")?.classList.add("active");
+    fetchDevices();
   } else {
-    document.getElementById("tab-standard").classList.add("active");
-    document.getElementById("view-standard").classList.add("active");
+    document.getElementById("tab-standard")?.classList.add("active");
+    document.getElementById("view-standard")?.classList.add("active");
   }
 }
 
@@ -433,33 +570,115 @@ function updateLocalAlert(updated) {
   }
 }
 
-let isProductionMode = false;
+let isProductionMode = true;
 
-async function fetchAgentStatus() {
+async function fetchDevices() {
   try {
-    const res = await fetch("/api/v1/agent/status");
+    const res = await fetch("/api/v1/devices");
     if (res.ok) {
       const data = await res.json();
-      const badge = document.getElementById("agent-status-badge");
-      if (badge) {
-        badge.innerHTML = `Agents: <strong>${data.active_agents_count} Live</strong>`;
+      activeDevicesList = data.devices || [];
+      const count = data.active_devices_count || activeDevicesList.length;
+
+      const badgeCount = document.getElementById("devices-count-badge");
+      if (badgeCount) badgeCount.innerText = `${count} Live`;
+
+      const tabCount = document.getElementById("tab-device-count");
+      if (tabCount) tabCount.innerText = count;
+
+      const agentBadge = document.getElementById("agent-status-badge");
+      if (agentBadge) {
+        agentBadge.innerHTML = `Endpoints: <strong id="devices-count-badge">${count} Live</strong>`;
       }
+
+      renderDevices(activeDevicesList);
     }
   } catch (e) {
-    console.error("[Agent Status Error]", e);
+    console.error("[Fetch Devices Error]", e);
   }
+}
+
+async function fetchAgentStatus() {
+  await fetchDevices();
+}
+
+function renderDevices(devices) {
+  const container = document.getElementById("monitored-devices-grid");
+  if (!container) return;
+
+  if (!devices || devices.length === 0) {
+    container.innerHTML = `<div class="empty-state">No monitored devices registered yet. Open the dashboard in a browser or run collector.py.</div>`;
+    return;
+  }
+
+  container.innerHTML = devices.map(dev => {
+    const isSelf = dev.device_id === currentClientDeviceId;
+    const isHost = dev.device_type && dev.device_type.includes("Host Server");
+    const isPython = dev.device_type && dev.device_type.includes("Python");
+    
+    let icon = "💻";
+    if (isHost) icon = "🖥️";
+    else if (isPython) icon = "🛡️";
+    else if (dev.os && (dev.os.includes("Android") || dev.os.includes("iOS"))) icon = "📱";
+    else icon = "🌐";
+
+    const lastSeenFormatted = dev.last_seen ? dev.last_seen.substring(11, 19) : "Just now";
+
+    return `
+      <div class="device-card ${isSelf ? 'self-client' : ''}">
+        <div class="device-header">
+          <div class="device-title-group">
+            <span class="device-name">${icon} ${escapeHtml(dev.hostname)} ${isSelf ? '<span style="color: #38bdf8; font-size: 11px;">(This Device)</span>' : ''}</span>
+            <span class="device-type-tag">${escapeHtml(dev.device_type || 'Monitored Node')}</span>
+          </div>
+          <span class="pulse-badge">
+            <span class="radar-dot"></span> ${escapeHtml(dev.status || 'ONLINE')}
+          </span>
+        </div>
+
+        <div class="device-specs-table">
+          <div class="spec-entry">
+            <span class="spec-k">OS Platform</span>
+            <span class="spec-v">${escapeHtml(dev.os || 'Standard OS')}</span>
+          </div>
+          <div class="spec-entry">
+            <span class="spec-k">Browser / Agent</span>
+            <span class="spec-v">${escapeHtml(dev.browser || 'Native Agent')}</span>
+          </div>
+          <div class="spec-entry">
+            <span class="spec-k">CPU Cores</span>
+            <span class="spec-v">${dev.cpu_cores || 1} Cores</span>
+          </div>
+          <div class="spec-entry">
+            <span class="spec-k">Memory / RAM</span>
+            <span class="spec-v">${dev.device_memory_gb ? dev.device_memory_gb + ' GB' : 'N/A'}</span>
+          </div>
+          <div class="spec-entry">
+            <span class="spec-k">IP Address</span>
+            <span class="spec-v">${escapeHtml(dev.ip_address || '127.0.0.1')}</span>
+          </div>
+          <div class="spec-entry">
+            <span class="spec-k">Display / Resolution</span>
+            <span class="spec-v">${escapeHtml(dev.screen_res || 'Headless')}</span>
+          </div>
+        </div>
+
+        <div class="device-footer">
+          <span>Events Ingested: <strong style="color: #3fb950;">${dev.events_count || 0}</strong></span>
+          <span>Last Heartbeat: <strong>${lastSeenFormatted} UTC</strong></span>
+        </div>
+      </div>
+    `;
+  }).join("");
 }
 
 function toggleEngineMode() {
   isProductionMode = !isProductionMode;
   const btn = document.getElementById("mode-toggle-btn");
   if (btn) {
-    btn.innerText = isProductionMode ? "Mode: Live Agent Ingest" : "Mode: Production Agent";
-    btn.className = isProductionMode ? "btn-sm btn-warning" : "btn-sm btn-primary";
+    btn.innerText = isProductionMode ? "Mode: Live Production Ingest" : "Mode: Simulation Lab";
+    btn.className = isProductionMode ? "btn-sm btn-primary" : "btn-sm btn-secondary";
   }
-  alert(isProductionMode ? 
-    "🚀 Switched to Live Production Ingestion Mode!\n\nRun 'python agent/collector.py' on any host to ingest real endpoint events into this SOC engine." : 
-    "🧪 Switched to Simulation Lab Mode.");
 }
 
 async function downloadIncidentReport() {
@@ -481,8 +700,6 @@ async function downloadIncidentReport() {
     alert("Failed to export incident report.");
   }
 }
-
-setInterval(fetchAgentStatus, 4000);
 
 function downloadPcapCapture() {
   if (!selectedAlertId) return;
