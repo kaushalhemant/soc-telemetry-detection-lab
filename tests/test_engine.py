@@ -204,3 +204,9 @@ def test_alert_triage_workflow(engine):
 
     tuned = engine.alert_manager.tune_alert_rule(target_alert.alert_id, new_threshold=10)
     assert tuned.tuned is True
+
+def test_rules_reloading(engine):
+    initial_count = len(engine.rules)
+    reloaded_count = engine.reload_rules()
+    assert reloaded_count == initial_count
+    assert reloaded_count >= 11

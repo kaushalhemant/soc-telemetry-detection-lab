@@ -70,10 +70,32 @@ def main():
 
     threading.Thread(target=open_browser, daemon=True).start()
 
-    # Launch Uvicorn server
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+
+    reload_dirs = [
+        project_root,
+        os.path.join(project_root, "rules"),
+        os.path.join(project_root, "engine"),
+        os.path.join(project_root, "generator"),
+        os.path.join(project_root, "web"),
+        os.path.join(project_root, "agent"),
+    ]
+    reload_dirs = [d for d in reload_dirs if os.path.isdir(d)]
+
+    print("[+] Auto-Update / Hot Reloading: ACTIVE (Watching Python code, SIGMA YAML rules, and web assets)")
+
+    # Launch Uvicorn server with hot reload
     import uvicorn
-    from web.server import app
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run(
+        "web.server:app",
+        host=host,
+        port=port,
+        reload=True,
+        reload_dirs=reload_dirs,
+        reload_includes=["*.py", "*.yml", "*.yaml", "*.html", "*.js", "*.css", "*.json"],
+    )
 
 if __name__ == "__main__":
     main()

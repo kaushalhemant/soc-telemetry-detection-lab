@@ -197,6 +197,17 @@ def get_metrics():
 def get_rules():
     return [r.raw_dict for r in detection_engine.rules]
 
+@app.post("/api/rules/reload")
+def reload_rules_endpoint():
+    """Reloads all SIGMA rules from disk dynamically without restarting server."""
+    count = detection_engine.reload_rules()
+    return {
+        "status": "success",
+        "message": f"Successfully reloaded {count} SIGMA rules from disk",
+        "rules_count": count,
+        "rules": [r.raw_dict for r in detection_engine.rules]
+    }
+
 @app.get("/api/rules/{rule_id}/export")
 def export_rule(rule_id: str):
     target_rule = next((r for r in detection_engine.rules if r.id == rule_id), None)

@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from engine.pcap_analyzer import PcapAnalyzer
 from engine.burp_integrator import BurpIntegrator
-from web.server import export_wireshark_pcap, export_burp_repeater_request, ingest_burp_proxy_xml, BurpIngestRequest, trigger_simulation, SimulationRequest
+from web.server import export_wireshark_pcap, export_burp_repeater_request, ingest_burp_proxy_xml, BurpIngestRequest, trigger_simulation, SimulationRequest, reload_rules_endpoint
 from generator.models import ScenarioType
 
 def test_pcap_generation():
@@ -85,3 +85,9 @@ def test_integration_api_endpoints():
     ingest_res = ingest_burp_proxy_xml(burp_req)
     assert ingest_res["status"] == "success"
     assert ingest_res["ingested_count"] == 1
+
+def test_reload_rules_api():
+    res = reload_rules_endpoint()
+    assert res["status"] == "success"
+    assert res["rules_count"] >= 11
+    assert len(res["rules"]) >= 11

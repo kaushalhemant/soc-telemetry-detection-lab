@@ -24,12 +24,20 @@ class DetectionEngine:
         # Deduplication tracker to prevent alert storms (rule_id + group_key -> last_alert_time)
         self.alert_cooldowns: Dict[str, float] = {}
 
+        self.rules_dir = rules_dir
         if rules_dir:
             self.load_rules(rules_dir)
 
     def load_rules(self, rules_dir: str):
+        self.rules_dir = rules_dir
         self.rules = load_rules_from_directory(rules_dir)
         print(f"[DetectionEngine] Successfully loaded {len(self.rules)} rules from {rules_dir}")
+
+    def reload_rules(self) -> int:
+        """Reloads all SIGMA rules from the configured rules directory."""
+        if self.rules_dir:
+            self.load_rules(self.rules_dir)
+        return len(self.rules)
 
     def register_alert_listener(self, listener: Callable[[DetectionAlert], None]):
         if listener not in self.alert_listeners:
