@@ -4,6 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![SIGMA Standard](https://img.shields.io/badge/Rules-SIGMA%20YAML-orange.svg)](https://github.com/SigmaHQ/sigma)
 [![MITRE ATT&CK](https://img.shields.io/badge/MITRE-ATT%26CK%20Mapped-red.svg)](https://attack.mitre.org/)
+[![Vercel Deployment](https://img.shields.io/badge/Vercel-Serverless%20Ready-black.svg)](https://vercel.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > **A real-time SOC detection engineering lab that ingests live host and web telemetry, identifies multi-stage cyber attacks using SIGMA rules and stateful temporal windows, and empowers analysts with instant alert triage, SIEM query translation (Splunk SPL / Elastic KQL), and forensic packet exports.**
@@ -15,7 +16,7 @@
 ```mermaid
 flowchart TD
     subgraph Telemetry Sources ["1. Telemetry Sources & Ingestion"]
-        A1["🎯 Multi-Stage Attack Simulators<br/>(10+ Attack Scenarios)"]
+        A1["🎯 Multi-Stage Attack Simulators<br/>(11 Attack Scenarios)"]
         A2["📡 Remote Endpoint Collector Agent<br/>(HTTP Batch /api/v1/ingest)"]
         A3["🌐 Burp Suite XML Proxy Logs<br/>(Web Exploit / API Payloads)"]
         A4["🪵 Benign Baseline Traffic Generator<br/>(SSH, Syslog, Web Requests)"]
@@ -93,9 +94,10 @@ Building this SOC detection and telemetry lab provided deep, hands-on engineerin
 
 ## 🌟 Key Features
 
-* **⚡ Real-Time SIGMA Detection Engine**: Evaluates live telemetry against single-event and sliding-window stateful correlation rules in standard YAML.
-* **🎯 10+ Scenario Attack Simulators**: Triggers realistic cyber attack scenarios with a single click or API call.
-* **🖥️ Interactive SOC Web Dashboard**: Modern dark-themed dashboard powered by real-time WebSockets with live event feeds, alert queues, and SOC metrics tracking (**Precision %, Recall %, FPR %, MTTD**).
+* **⚡ Real-Time SIGMA Detection Engine**: Evaluates live telemetry against single-event and sliding-window stateful correlation rules in standard YAML format.
+* **🔄 Auto-Update & Hot Reloading**: Watches Python code, SIGMA YAML rules, and web assets to update the server dynamically without manual restarts.
+* **🎯 11 Realistic Attack Simulators**: Triggers authentic multi-stage cyber attacks with a single click or CLI/API call.
+* **🖥️ Interactive SOC Web Dashboard**: Modern dark-themed workstation powered by real-time WebSockets with live event feeds, alert queues, and SOC metrics tracking (**Precision %, Recall %, FPR %, MTTD**).
 * **🔄 Dual-SIEM Query Exporters**: Converts any active SIGMA rule into **Splunk SPL** and **Elastic KQL** queries instantly.
 * **🌐 MITRE ATT&CK Navigator Integration**: Dynamically exports technique layer JSON files for visualization in the official MITRE ATT&CK Navigator.
 * **🦈 Wireshark & Burp Suite Integrations**:
@@ -103,24 +105,27 @@ Building this SOC detection and telemetry lab provided deep, hands-on engineerin
   * **Burp Suite**: Ingests Burp Suite XML proxy logs and exports raw HTTP payloads with formatted `cURL` commands for offensive verification.
 * **📡 Remote Endpoint Collector Agent**: Ingests remote telemetry batches over HTTP (`/api/v1/ingest`) with live agent heartbeat tracking.
 * **📄 Forensic Incident Reporter**: Generates audit-ready SOC Incident Analysis Reports in JSON and Markdown formats.
+* **☁️ Vercel Serverless Ready**: Native ASGI entrypoint (`api/index.py`) and rewrites (`vercel.json`) configured for one-click cloud deployment.
 
 ---
 
 ## 🚀 Quickstart Guide
 
-### Option 1: Automated Launcher (Recommended)
+### Option 1: Automated Launcher with Hot Reload (Recommended)
 
-Clone the repository and run the automated quickstart script:
+Clone the repository and run the automated quickstart launcher:
 
 ```bash
 # Clone the repository
-git clone https://github.com/hemuh877-del/soc-telemetry-detection-lab.git
+git clone https://github.com/kaushalhemant/soc-telemetry-detection-lab.git
 cd soc-telemetry-detection-lab
 
 # Run automated setup & launcher
 python setup_and_run.py
 ```
-> `setup_and_run.py` verifies dependencies, initializes the FastAPI/Uvicorn server at `http://127.0.0.1:8000`, and opens the dashboard in your default browser automatically.
+> `setup_and_run.py` verifies dependencies, initializes the FastAPI/Uvicorn server at `http://127.0.0.1:8000` with **hot reloading** enabled, activates host endpoint monitoring, and opens the dashboard in your default browser automatically.
+
+---
 
 ### Option 2: Live Endpoint Telemetry Bridge (CLI Forwarder)
 
@@ -140,13 +145,17 @@ python bridge.py --status
 python bridge.py --simulate brute_force
 ```
 
-### Option 3: Manual Setup
+---
+
+### Option 3: Manual Local Setup
 
 ```bash
 # Create and activate virtual environment
 python -m venv .venv
+
 # On Windows:
 .venv\Scripts\activate
+
 # On Linux/macOS:
 source .venv/bin/activate
 
@@ -154,8 +163,10 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 # Start the detection engine and web server
-python web/server.py
+python setup_and_run.py
 ```
+
+---
 
 ### Option 4: Docker Deployment
 
@@ -164,6 +175,21 @@ python web/server.py
 docker-compose up --build
 ```
 Access the dashboard at `http://localhost:8000`.
+
+---
+
+### Option 5: Vercel Cloud Serverless Deployment
+
+Deploy the entire SOC detection suite directly to Vercel:
+
+1. Import your GitHub repository (`kaushalhemant/soc-telemetry-detection-lab`) on [vercel.com/new](https://vercel.com/new).
+2. Set Framework Preset to **Other** and Root Directory to `./`.
+3. Click **Deploy**. Vercel will automatically build from [`api/index.py`](api/index.py) using the [`vercel.json`](vercel.json) rewrites.
+
+Or deploy via terminal:
+```bash
+vercel --prod
+```
 
 ---
 
@@ -191,6 +217,8 @@ $$\text{Recall} = \frac{\text{True Positives}}{\text{True Positives} + \text{Fal
 | `POST /api/alerts/{alert_id}/triage` | `POST` | Update alert triage state (`INVESTIGATING`, `CLOSED`, etc.) |
 | `POST /api/alerts/{alert_id}/tune` | `POST` | Tune detection rule parameters for an alert |
 | `GET /api/metrics` | `GET` | Retrieve live SOC KPIs (Precision, Recall, FPR, MTTD) |
+| `GET /api/rules` | `GET` | Retrieve list of all loaded SIGMA rules |
+| `POST /api/rules/reload` | `POST` | Hot-reload all SIGMA YAML rules from disk dynamically |
 | `GET /api/rules/{rule_id}/export` | `GET` | Export SIGMA rule to **Splunk SPL** & **Elastic KQL** |
 | `GET /api/mitre/navigator` | `GET` | Download MITRE ATT&CK Navigator Layer JSON |
 | `GET /api/v1/devices` | `GET` | List all actively monitored endpoints and user client devices |
@@ -205,12 +233,36 @@ $$\text{Recall} = \frac{\text{True Positives}}{\text{True Positives} + \text{Fal
 
 ---
 
+## 🧪 Automated Testing Suite
+
+The lab includes comprehensive unit and integration tests covering detection rules, stateful window correlation, SIEM transpilers, PCAP generators, and REST API endpoints:
+
+```bash
+pytest tests/ -v
+```
+
+```
+============================= test session starts =============================
+collected 26 items
+
+tests/test_engine.py ................                                    [ 61%]
+tests/test_integrations.py ......                                        [ 84%]
+tests/test_live_ingest.py ....                                           [100%]
+
+============================= 26 passed in 7.57s ==============================
+```
+
+---
+
 ## 📁 Repository Structure
 
 ```
 .
 ├── bridge.py               # Universal Live Endpoint Telemetry Bridge & CLI Forwarder
-├── setup_and_run.py        # One-Command Quickstart Launcher
+├── setup_and_run.py        # One-Command Quickstart Launcher (Hot Reload enabled)
+├── api/                    # Vercel Serverless Function & Cloud Entrypoint
+│   ├── index.py            # ASGI Application Entrypoint
+│   └── requirements.txt    # Serverless Dependencies
 ├── agent/                  # Endpoint Collector Agent (remote telemetry ingestion)
 │   └── collector.py
 ├── engine/                 # Core Detection & Analytics Engine
@@ -228,8 +280,12 @@ $$\text{Recall} = \frac{\text{True Positives}}{\text{True Positives} + \text{Fal
 ├── rules/                  # SIGMA Detection Rules (YAML format)
 ├── docs/                   # Incident Case Studies & Forensic Guides
 │   └── INCIDENT_CASE_STUDY.md
-├── tests/                  # Automated Test Suite (24 test cases)
+├── tests/                  # Automated Test Suite (26 test cases)
+│   ├── test_engine.py
+│   ├── test_integrations.py
+│   └── test_live_ingest.py
 ├── web/                    # SOC Web Application (FastAPI + WebSocket UI)
+├── vercel.json             # Vercel Cloud Serverless Deployment Configuration
 ├── Dockerfile              # Container Dockerfile
 ├── docker-compose.yml      # Container Orchestration
 ├── requirements.txt        # Python Dependencies
@@ -241,4 +297,3 @@ $$\text{Recall} = \frac{\text{True Positives}}{\text{True Positives} + \text{Fal
 ## 📜 License
 
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
-
