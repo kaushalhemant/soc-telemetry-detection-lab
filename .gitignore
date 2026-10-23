@@ -39,6 +39,7 @@ htmlcov/
 .idea/
 *.swp
 *.swo
+*.bak
 
 # Logs & Databases
 *.log

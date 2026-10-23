@@ -267,9 +267,6 @@ async function fetchMetrics() {
 
 function appendTelemetryLog(evt) {
   if (!evt) return;
-  totalTelemetryCount++;
-  document.getElementById("metric-total-events").innerText = totalTelemetryCount.toLocaleString();
-
   const consoleBox = document.getElementById("log-console");
   const row = document.createElement("div");
   row.className = "log-row";
@@ -287,6 +284,10 @@ function appendTelemetryLog(evt) {
   if (consoleBox.children.length > 150) {
     consoleBox.removeChild(consoleBox.lastChild);
   }
+  // This is a visible-row count, not a claim about backend events processed.
+  totalTelemetryCount = consoleBox.children.length;
+  const counter = document.getElementById("metric-total-events");
+  if (counter) counter.innerText = totalTelemetryCount.toLocaleString();
 }
 
 function prependAlert(alert) {
@@ -440,6 +441,9 @@ async function clearAlerts() {
 
 function clearTelemetry() {
   document.getElementById("log-console").innerHTML = "";
+  totalTelemetryCount = 0;
+  const counter = document.getElementById("metric-total-events");
+  if (counter) counter.innerText = "0";
 }
 
 async function openRemediationModal(alertId) {
