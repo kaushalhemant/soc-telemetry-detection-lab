@@ -52,21 +52,37 @@ def main():
     
     check_dependencies()
 
-    host = "127.0.0.1"
+    host = "0.0.0.0"
     port = 8000
-    url = f"http://{host}:{port}"
+    local_url = f"http://127.0.0.1:{port}"
 
-    print(f"\n[+] Starting SOC Telemetry Detection Engine & Web UI at {url} ...")
+    # Discover LAN IP so other devices on the network can connect
+    lan_ip = "127.0.0.1"
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        lan_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        pass
+
+    network_url = f"http://{lan_ip}:{port}"
+
+    print(f"\n[+] Starting SOC Telemetry Detection Engine & Web UI ...")
+    print(f"    - Local Console : {local_url}")
+    print(f"    - Network Listen: {network_url} (for remote endpoints)")
+    print(f"\n[+] To monitor a different machine on your network, run on that device:")
+    print(f"    python collector.py --server {network_url}\n")
     print("[+] Autonomous Host Monitoring: ACTIVE")
     print("[+] Press Ctrl+C to terminate the lab.\n")
 
     # Start autonomous host endpoint collector in background
-    threading.Thread(target=start_embedded_endpoint_collector, args=(url,), daemon=True).start()
+    threading.Thread(target=start_embedded_endpoint_collector, args=(local_url,), daemon=True).start()
 
     # Open browser automatically after 1.5 seconds
     def open_browser():
         time.sleep(1.8)
-        webbrowser.open(url)
+        webbrowser.open(local_url)
 
     threading.Thread(target=open_browser, daemon=True).start()
 
