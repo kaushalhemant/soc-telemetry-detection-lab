@@ -74,12 +74,21 @@ class BurpIntegrator:
     def parse_burp_xml_logs(xml_str: str) -> List[LogEvent]:
         """
         Parses Burp Suite XML proxy history items (<items><item>...) and converts them to LogEvent objects.
+        Safely validates input size and rejects external DTD/entity declarations (XXE protection).
         """
         events = []
+        if not xml_str or len(xml_str) > 2 * 1024 * 1024:
+            raise ValueError("Invalid or oversized Burp XML content (max 2MB allowed).")
+
+        # Basic XXE / Entity expansion protection
+        upper_xml = xml_str[:4096].upper()
+        if "<!DOCTYPE" in upper_xml or "<!ENTITY" in upper_xml:
+            raise ValueError("Disallowed DTD or entity declaration in Burp XML payload.")
+
         try:
             root = ET.fromstring(xml_str)
             items = root.findall(".//item") if root.tag != "item" else [root]
-            now_iso = datetime.datetime.utcnow().isoformat() + "Z"
+            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
             for item in items:
                 url = item.findtext("url", "http://target.local/")
@@ -117,10 +126,13 @@ class BurpIntegrator:
                         "status_code": int(status) if status.isdigit() else 200,
                         "path": path,
                         "raw_request": raw_req
-                    }
+                    },
+                    telemetry_source="replayed",
+                    ground_truth=None
                 )
                 events.append(evt)
         except Exception as e:
             print(f"[BurpIntegrator Error] Failed to parse Burp XML: {e}")
+            raise
 
         return events

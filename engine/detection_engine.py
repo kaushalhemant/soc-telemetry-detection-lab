@@ -80,7 +80,7 @@ class DetectionEngine:
                 ):
                     alert = self.alert_manager.create_alert(rule, [event])
                     self.alert_cooldowns[cooldown_key] = now_ts
-                    self.metrics_engine.record_detection(alert)
+                    self.metrics_engine.record_detection(alert, primary_event=event)
                     generated_alerts.append(alert)
                     self._notify_listeners(alert)
 
@@ -138,7 +138,7 @@ class DetectionEngine:
                     )
 
                     self.alert_cooldowns[cooldown_key] = now_ts
-                    self.metrics_engine.record_detection(alert)
+                    self.metrics_engine.record_detection(alert, primary_event=matched_events[-1])
                     generated_alerts.append(alert)
                     self._notify_listeners(alert)
 

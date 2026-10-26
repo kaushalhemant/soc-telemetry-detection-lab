@@ -86,5 +86,5 @@ detection:
 2. **Containment & Remediation**:
    * **Container Isolation**: Trigger container network isolation for `cnt-web-frontend-03`.
    * **Process Termination**: Kill PID 3410 (`nc.traditional`).
-   * **Rule Tuning**: Verify no baseline false positives occurred; precision metric maintained at **100.0%**.
+   * **Rule Tuning**: Verify no baseline false positives occurred; precision metric verified against validated ground-truth events.
 3. **Escalation & Closure**: Alert marked as `ESCALATED` to Incident Response Team, then `CLOSED` after vulnerability patch deployment.

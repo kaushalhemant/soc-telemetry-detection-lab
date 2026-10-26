@@ -4,10 +4,10 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![SIGMA Standard](https://img.shields.io/badge/Rules-SIGMA%20YAML-orange.svg)](https://github.com/SigmaHQ/sigma)
 [![MITRE ATT&CK](https://img.shields.io/badge/MITRE-ATT%26CK%20Mapped-red.svg)](https://attack.mitre.org/)
-[![Vercel Deployment](https://img.shields.io/badge/Vercel-Serverless%20Ready-black.svg)](https://vercel.com/)
+[![Tests Passing](https://img.shields.io/badge/Tests-33%20Passed-3fb950.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-> **A real-time SOC detection engineering lab that ingests live host and web telemetry, identifies multi-stage cyber attacks using SIGMA rules and stateful temporal windows, and empowers analysts with instant alert triage, SIEM query translation (Splunk SPL / Elastic KQL), and forensic packet exports.**
+> **A real-time SOC detection engineering lab that ingests host, network, and proxy telemetry, evaluates multi-stage cyber attacks using SIGMA YAML rules and sliding temporal windows, and provides honest benchmark metrics, forensic packet exports, and SIEM query translations (Splunk SPL / Elastic KQL).**
 
 ---
 
@@ -16,26 +16,27 @@
 ```mermaid
 flowchart TD
     subgraph Telemetry Sources ["1. Telemetry Sources & Ingestion"]
-        A1["🎯 Multi-Stage Attack Simulators<br/>(11 Attack Scenarios)"]
-        A2["📡 Remote Endpoint Collector Agent<br/>(HTTP Batch /api/v1/ingest)"]
-        A3["🌐 Burp Suite XML Proxy Logs<br/>(Web Exploit / API Payloads)"]
-        A4["🪵 Benign Baseline Traffic Generator<br/>(SSH, Syslog, Web Requests)"]
+        A1["🎯 Multi-Stage Attack Simulators<br/>(11 Attack Scenarios, Ground Truth: Attack)"]
+        A2["📡 Remote Endpoint Collector Agent<br/>(psutil Host Telemetry /api/v1/ingest)"]
+        A3["🌐 Burp Suite XML Proxy Ingest<br/>(XXE-Safe Parser, Telemetry: Replayed)"]
+        A4["🪵 Benign Baseline Traffic Generator<br/>(Normal User Traffic, Ground Truth: Benign)"]
     end
 
     subgraph Core Engine ["2. Core Detection & Analytics Engine"]
-        B1["⚡ Event Normalization & Ingestion Pipeline<br/>(Pydantic LogEvent Schema)"]
-        B2["📜 SIGMA Rule Parser & Evaluator<br/>(Field-level & Boolean Conditions)"]
-        B3["⏱️ Stateful Sliding-Window Correlator<br/>(Time-bounded Threshold Aggregation)"]
-        B4["📊 Alert Manager & SOC Metrics Engine<br/>(Precision, Recall, FPR, MTTD)"]
+        B1["⚡ Event Normalization & Ingestion Pipeline<br/>(Pydantic LogEvent with Ground-Truth Tracking)"]
+        B2["📜 SIGMA Rule Parser & Evaluator<br/>(Field-level & Boolean Condition Matchers)"]
+        B3["⏱️ Stateful Sliding-Window Correlator<br/>(Temporal Grouping & Threshold Aggregation)"]
+        B4["📊 Trustworthy Metrics Engine<br/>(Strict TP/FP/FN/TN, Zero-Denominator N/A Guards, True MTTD)"]
+        B5["🧪 Deterministic Validation Suite<br/>(13 Reproducible Scenarios with Documented Expectations)"]
     end
 
     subgraph Analyst Tooling ["3. SOC Operations & Forensic Tooling"]
-        C1["🖥️ Real-Time WebSocket Web Dashboard<br/>(Live Triage, 1-Click Rule Tuning)"]
+        C1["🖥️ 3-Workflow SOC Workstation<br/>(1. Run Test | 2. Investigate Alert | 3. Explore Rules)"]
         C2["🔄 SIEM Exporters<br/>(Splunk SPL & Elastic KQL)"]
-        C3["🦈 Wireshark Integration<br/>(Automated .pcap Capture & Display Filters)"]
+        C3["🦈 Wireshark PCAP Generator<br/>(Valid Binary v2.4 PCAP & Display Filters)"]
         C4["🔌 Burp Suite Repeater Exporter<br/>(Raw HTTP Payloads & cURL Commands)"]
         C5["🗺️ MITRE ATT&CK Navigator Layer<br/>(Technique Coverage Matrix JSON)"]
-        C6["📄 Forensic Incident Report Generator<br/>(Audit-Ready Markdown/JSON)"]
+        C6["📄 Forensic Incident Report Generator<br/>(Structured Incident JSON Audit Records)"]
     end
 
     A1 --> B1
@@ -45,6 +46,7 @@ flowchart TD
     B1 --> B2
     B2 --> B3
     B3 --> B4
+    B5 --> B1
     B4 --> C1
     B4 --> C2
     B4 --> C3
@@ -57,200 +59,240 @@ flowchart TD
 
 ## 🎯 What It Detects
 
-The lab provides end-to-end detection coverage for 11 realistic attack scenarios mapped directly to **MITRE ATT&CK tactics and techniques**:
+The lab provides detection coverage for 11 realistic attack scenarios mapped to **MITRE ATT&CK tactics and techniques**:
 
 ### 🔑 Credential Access & Authentication Abuse
-* **LSASS Memory Dumping (`T1003.001` | `RULE-011`)**: Detects unauthorized access to `lsass.exe` process memory initiated via `rundll32.exe`, `comsvcs.dll MiniDump`, or memory dumping utilities to extract plaintext credentials and NTLM hashes.
-* **Kerberoasting via TGS Request (`T1558.003` | `RULE-010`)**: Identifies anomalous Active Directory Kerberos Ticket Granting Service (TGS) requests querying Service Principal Names (SPNs) with downgrade-prone RC4-HMAC (`0x17`) encryption for offline cracking.
-* **SSH Credential Brute Force (`T1110.001` | `RULE-001`)**: Correlates multiple consecutive failed SSH authentication attempts across a stateful sliding temporal window (e.g., $\ge 5$ failures in 30 seconds) grouped by source IP.
+* **LSASS Memory Dumping (`T1003.001` | `RULE-011`)**: Detects unauthorized access to `lsass.exe` process memory initiated via `rundll32.exe`, `comsvcs.dll MiniDump`, or memory dumping utilities.
+* **Kerberoasting via TGS Request (`T1558.003` | `RULE-010`)**: Identifies anomalous Active Directory Kerberos Ticket Granting Service (TGS) requests querying Service Principal Names (SPNs) with weak RC4-HMAC (`0x17`) encryption.
+* **SSH Credential Brute Force (`T1110.001` | `RULE-001`)**: Correlates consecutive failed SSH authentication attempts across a stateful sliding temporal window ($\ge 5$ failures in 30 seconds grouped by source IP).
 
 ### 🛡️ Privilege Escalation & Defense Evasion
-* **SUID Binary Abuse & Privilege Escalation (`T1548.001` | `RULE-002`)**: Detects setuid permission modifications (`chmod u+s`), unauthorized sudo abuse, and execution of shells resulting in effective root privileges (`uid=0`).
-* **Process Hollowing & Memory Injection (`T1055.012` | `RULE-008`)**: Catches stealthy code injection techniques where legitimate system processes (e.g., `svchost.exe`) are spawned from abnormal paths with unbacked memory sections and `NtUnmapViewOfSection` execution.
-* **Security Audit Log Deletion & Tampering (`T1070.002` | `RULE-007`)**: Flags malicious attempts to wipe, unlink, or suppress critical host audit trails (such as `/var/log/auth.log`, `/var/log/syslog`, or `wevtutil` log clearing).
-* **BYOVD Kernel Driver Tampering (`T1068` | `RULE-009`)**: Detects "Bring Your Own Vulnerable Driver" attacks where known vulnerable signed kernel drivers (e.g., `RTCore64.sys`) are loaded to blind endpoint security sensors and modify kernel callbacks.
+* **SUID Binary Abuse & Privilege Escalation (`T1548.001` | `RULE-002`)**: Detects setuid permission modifications (`chmod u+s`), unauthorized sudo abuse, and shell executions resulting in effective root privileges (`uid=0`).
+* **Process Hollowing & Memory Injection (`T1055.012` | `RULE-008`)**: Catches code injection techniques where system processes (e.g., `svchost.exe`) unmap memory sections (`NtUnmapViewOfSection`) to host malicious code.
+* **Security Audit Log Deletion & Tampering (`T1070.002` | `RULE-007`)**: Flags malicious attempts to wipe or suppress critical audit trails (`/var/log/auth.log`, `/var/log/syslog`, or `wevtutil cl`).
+* **BYOVD Kernel Driver Tampering (`T1068` | `RULE-009`)**: Detects "Bring Your Own Vulnerable Driver" attacks where signed vulnerable kernel drivers (e.g., `RTCore64.sys`) are loaded to blind endpoint security sensors.
 
 ### ⚡ Execution, Persistence & Lateral Movement
-* **Webshell & Anomalous Shell Spawn (`T1059.004` | `RULE-003`)**: Flags web server daemon processes (`nginx`, `apache2`, `www-data`) spawning interactive shells (`/bin/sh`, `bash`) or outbound network utilities (`nc`, `netcat`) indicative of reverse shells.
-* **Crontab Persistence Modification (`T1053.003` | `RULE-004`)**: Identifies unauthorized additions and modifications to scheduled cron jobs (`crontab -e`) pointing to external staging scripts or reverse connections.
-* **WinRM & Remote Execution Lateral Movement (`T1021.006` | `RULE-005`)**: Intercepts lateral network hops and remote PowerShell execution via Windows Remote Management (`wsmprovhost.exe`, `psexec`) across internal endpoints.
+* **Webshell & Anomalous Shell Spawn (`T1059.004` | `RULE-003`)**: Flags web server daemon processes (`nginx`, `apache2`, `www-data`) spawning interactive shells (`/bin/sh`, `bash`) or outbound network utilities (`nc`).
+* **Crontab Persistence Modification (`T1053.003` | `RULE-004`)**: Identifies unauthorized modifications to scheduled cron jobs (`crontab -e`) pointing to external staging scripts.
+* **WinRM & Remote Execution Lateral Movement (`T1021.006` | `RULE-005`)**: Intercepts lateral network hops and remote PowerShell execution via Windows Remote Management (`wsmprovhost.exe`, `psexec`).
 
 ### 📡 Command & Control and Exfiltration
-* **DNS Tunneling & Covert Exfiltration (`T1071.004` | `RULE-006`)**: Identifies high-frequency encoded DNS TXT/NULL record queries directed at attacker-controlled authoritative name servers to bypass standard perimeter egress controls.
+* **DNS Tunneling & Covert Exfiltration (`T1071.004` | `RULE-006`)**: Identifies high-frequency encoded DNS TXT/NULL queries directed at attacker-controlled authoritative name servers.
 
 ---
 
-## 💡 What I Learned
+## 🔍 Genuinely Functional vs. Simulated Features
 
-Building this SOC detection and telemetry lab provided deep, hands-on engineering takeaways across the detection lifecycle:
+To ensure transparency and credibility, this project clearly delineates verified functional capabilities from simulated or lab-scoped mechanisms:
 
-* **Stateful Correlation vs. Stateless Matching**: Single-event signature matching fails against distributed attacks like brute-force or low-and-slow reconnaissance. Implementing a sliding-window correlation engine highlighted how temporal aggregation, time-decay buffers, and entity grouping (by IP, User, or Host) are essential to catch multi-stage attacks without memory leaks.
-* **The Precision vs. Recall Tradeoff in SOC Operations**: High detection sensitivity often results in alert fatigue and false positives, eroding analyst trust. Designing interactive **one-click rule tuning** taught how threshold adjustments and conditional whitelisting directly impact SOC KPIs (Precision %, Recall %, FPR %, and MTTD).
-* **Telemetry Normalization is Foundational**: Real enterprise telemetry arrives in fragmented formats (Linux `auditd` syscall records, Syslog streams, Nginx access logs, and Burp Suite XML). Enforcing strict Pydantic event modeling and canonical field schemas allowed universal SIGMA rules to evaluate cleanly across diverse log sources.
-* **Vendor-Agnostic Detection as Code**: Writing detections in standard YAML and building automated transpilers to **Splunk SPL** and **Elastic KQL** proved how modular detection engineering decouples detection logic from proprietary SIEM query lock-in.
-* **Accelerating Analyst Triage with Contextual Forensics**: Detection alerts are only as good as the context delivered with them. Equipping alerts with instant **Wireshark `.pcap` generation**, **Burp Repeater exports**, and **MITRE ATT&CK Navigator matrices** showed how contextual tooling dramatically reduces Mean Time to Triage and Respond (MTTR).
-
----
-
-## 🌟 Key Features
-
-* **⚡ Real-Time SIGMA Detection Engine**: Evaluates live telemetry against single-event and sliding-window stateful correlation rules in standard YAML format.
-* **🔄 Auto-Update & Hot Reloading**: Watches Python code, SIGMA YAML rules, and web assets to update the server dynamically without manual restarts.
-* **🎯 11 Realistic Attack Simulators**: Triggers authentic multi-stage cyber attacks with a single click or CLI/API call.
-* **🖥️ Interactive SOC Web Dashboard**: Modern dark-themed workstation powered by real-time WebSockets with live event feeds, alert queues, and SOC metrics tracking (**Precision %, Recall %, FPR %, MTTD**).
-* **🔄 Dual-SIEM Query Exporters**: Converts any active SIGMA rule into **Splunk SPL** and **Elastic KQL** queries instantly.
-* **🌐 MITRE ATT&CK Navigator Integration**: Dynamically exports technique layer JSON files for visualization in the official MITRE ATT&CK Navigator.
-* **🦈 Wireshark & Burp Suite Integrations**:
-  * **Wireshark**: Generates raw, downloadable `.pcap` packet capture files on-demand with pre-built display filters.
-  * **Burp Suite**: Ingests Burp Suite XML proxy logs and exports raw HTTP payloads with formatted `cURL` commands for offensive verification.
-* **📡 Remote Endpoint Collector Agent**: Ingests remote telemetry batches over HTTP (`/api/v1/ingest`) with live agent heartbeat tracking.
-* **📄 Forensic Incident Reporter**: Generates audit-ready SOC Incident Analysis Reports in JSON and Markdown formats.
-* **☁️ Vercel Serverless Ready**: Native ASGI entrypoint (`api/index.py`) and rewrites (`vercel.json`) configured for one-click cloud deployment.
+| Feature / Integration | Status | Technical Implementation |
+| :--- | :--- | :--- |
+| **Wireshark PCAP Generator** | **Verified Genuine** | Generates real binary `libpcap` v2.4 captures with valid Ethernet frames, IPv4 headers, and TCP/UDP payload structures. |
+| **Burp Suite XML Importer** | **Verified Genuine** | Parses genuine Burp Suite Proxy HTTP history XML exports with entity resolution disabled (XXE-safe) and 2MB payload limits. |
+| **Endpoint Collector Agent** | **Verified Genuine** | `agent/collector.py` collects actual local OS processes, sockets, memory, and CPU metrics via `psutil` and streams HTTP batches. |
+| **SIGMA Rule Transpilers** | **Verified Genuine** | Translates SIGMA YAML AST into executable Splunk SPL and Elastic KQL queries. Generates valid MITRE ATT&CK Navigator JSON. |
+| **Threat Vector Simulators** | **Simulated / Synthetic** | Generates synthetic syslog, auditd, and Windows event log strings in-memory to trigger rules without executing real exploits. |
+| **Ground Truth & Metrics** | **Verified Mathematical** | Calculates Precision, Recall, FPR, and MTTD strictly from labeled events. Never fabricates 100% precision or non-zero MTTD without data. |
+| **Serverless Deployment (Vercel)** | **Stateless / Ephemeral** | Vercel executes ephemeral Python lambdas. WebSockets and in-memory caches do not persist across instances. |
 
 ---
 
-## 🚀 Quickstart Guide
+## 📊 Trustworthy Metrics Engine: Formulas & Definitions
 
-### Option 1: Automated Launcher with Hot Reload (Recommended)
+The detection engine tracks performance metrics using rigorous denominator validation:
 
-Clone the repository and run the automated quickstart launcher:
+### 1. Precision
+$$\text{Precision} = \frac{\text{True Positives (TP)}}{\text{True Positives (TP)} + \text{False Positives (FP)}}$$
+* **Constraint**: If $\text{TP} + \text{FP} = 0$, the dashboard displays **`N/A — insufficient data`**. It will **never** display 100% precision when zero detections have occurred.
+
+### 2. Recall (True Positive Rate)
+$$\text{Recall} = \frac{\text{True Positives (TP)}}{\text{True Positives (TP)} + \text{False Negatives (FN)}}$$
+* **Constraint**: If $\text{TP} + \text{FN} = 0$, the dashboard displays **`N/A — insufficient data`**. Requires validated attack scenarios with known ground-truth labels.
+
+### 3. False Positive Rate (FPR)
+$$\text{FPR} = \frac{\text{False Positives (FP)}}{\text{False Positives (FP)} + \text{True Negatives (TN)}}$$
+* **Constraint**: If $\text{FP} + \text{TN} = 0$, the dashboard displays **`N/A — insufficient data`**. Evaluated against validated benign baseline traffic.
+
+### 4. Mean Time to Detect (MTTD)
+$$\text{MTTD} = \frac{1}{k} \sum_{i=1}^{k} (\text{Alert Timestamp}_i - \text{Initial Event Timestamp}_i)$$
+* **Constraint**: Calculated strictly when valid chronological timestamps exist between the triggering event and the generated alert. If no detections have occurred or timestamps are invalid, displays **`N/A — insufficient data`**.
+
+> **Note on Telemetry Labeling**: Live telemetry ingested from browser clients or external collector agents is categorized as `LIVE` with `ground_truth=None`. It is tracked in total ingested event counts but does not distort benchmark detection metrics without ground-truth labels.
+
+---
+
+## 🖥️ 3-Workflow Workstation Interface
+
+The dashboard is structured around three distinct operational workflows:
+
+1. **🧪 Workflow 1: Run Detection Test**:
+   - **Deterministic Validation Suite**: Runs 13 controlled scenarios (11 attack vectors, sub-threshold brute force, and benign traffic) to produce a reproducible audit report with expected vs. actual outcomes and confusion matrix.
+   - **Interactive Simulators**: Trigger individual standard and uncommon APT scenarios on demand with instant feedback.
+   - **Live Test Stream Console**: Real-time log console showing emitted events and latency.
+
+2. **🔍 Workflow 2: Investigate Alerts**:
+   - **Search & Filters**: Search alerts by rule ID, title, MITRE technique, or host. Filter by triage status (`NEW`, `INVESTIGATING`, `ESCALATED`, `CLOSED`), severity, or telemetry source (`SIMULATED`, `LIVE`, `REPLAYED`).
+   - **Incident Forensics Modal**: Accessible dialog (`role="dialog"`, `Escape` to close) displaying triggering log evidence, analyst investigation notes, recommended response steps, Splunk SPL, Elastic KQL, Burp Repeater export, and 1-click Wireshark `.pcap` download.
+
+3. **⚙️ Workflow 3: Explore Rules & Integrations**:
+   - **SIGMA Rules Catalog**: Inspect all 11 loaded SIGMA YAML detection rules with hot-reload support (`POST /api/rules/reload`).
+   - **Forensic Tool Integrations**: Ingest Burp Suite XML proxy logs and review Wireshark filter configurations.
+   - **Endpoint Inventory**: Monitor connected nodes, Python agents, and browser clients with hardware specs and heartbeat indicators.
+
+---
+
+## 🚀 Installation & Local Execution
+
+### Prerequisites
+* Python 3.9+ (Python 3.11, 3.12, 3.13 supported)
+* `pip` package manager
+
+### 1. Local Setup (Recommended)
 
 ```bash
 # Clone the repository
 git clone https://github.com/kaushalhemant/soc-telemetry-detection-lab.git
 cd soc-telemetry-detection-lab
 
-# Run automated setup & launcher
-python setup_and_run.py
-```
-> `setup_and_run.py` verifies dependencies, initializes the FastAPI/Uvicorn server at `http://127.0.0.1:8000` with **hot reloading** enabled, activates host endpoint monitoring, and opens the dashboard in your default browser automatically.
-
----
-
-### Option 2: Live Endpoint Telemetry Bridge (CLI Forwarder)
-
-Stream your local computer's real-time processes, sockets, and hardware specs directly to the SOC Detection Engine:
-
-```bash
-# Start live telemetry bridge (auto-connects or auto-starts local engine)
-python bridge.py
-
-# Or stream live telemetry to a remote/cloud SOC deployment:
-python bridge.py --server https://your-soc-deployment.vercel.app
-
-# Check server health & active devices inventory:
-python bridge.py --status
-
-# Trigger an attack simulation directly from the CLI:
-python bridge.py --simulate brute_force
-```
-
----
-
-### Option 3: Manual Local Setup
-
-```bash
 # Create and activate virtual environment
+# Windows (PowerShell):
 python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 
-# On Windows:
-.venv\Scripts\activate
-
-# On Linux/macOS:
+# Linux / macOS:
+python3 -m venv .venv
 source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Start the detection engine and web server
+# Launch engine with hot reload enabled
 python setup_and_run.py
 ```
+The console will start at **`http://127.0.0.1:8000`** and automatically open in your default browser.
 
----
+### 2. Running Automated Tests
 
-### Option 4: Docker Deployment
+Run the full pytest suite covering rule evaluation, metrics calculation, forensic exporters, and live ingest:
 
 ```bash
-# Build and run with Docker Compose
-docker-compose up --build
+# Run all tests with verbose output
+pytest -v
+
+# Or run specific test modules:
+pytest tests/test_metrics.py -v       # Zero denominators, honest metrics, validator
+pytest tests/test_engine.py -v        # Detection rules and sliding windows
+pytest tests/test_integrations.py -v  # Wireshark PCAP & Burp XML parsing
+pytest tests/test_live_ingest.py -v   # Agent telemetry and device acquisition
 ```
-Access the dashboard at `http://localhost:8000`.
+
+Test suite baseline: **33 passed in ~7.9s (0 warnings)**.
 
 ---
 
-### Option 5: Vercel Cloud Serverless Deployment
+## 🎮 Running a Controlled Demo
 
-Deploy the entire SOC detection suite directly to Vercel:
+### Option A: Via the Web Dashboard
+1. Open `http://127.0.0.1:8000`.
+2. Stay on **1. Run Detection Test**.
+3. Click **▶ Run Deterministic Validation Suite (13 Scenarios)**.
+4. Review the generated validation matrix:
+   - 11 attack scenarios detected (`True Positives`).
+   - Sub-threshold brute force correctly ignored (`True Negative`).
+   - Benign background traffic correctly ignored (`True Negative`).
+   - 0 False Positives, 0 False Negatives.
+   - Precision: 100.0%, Recall: 100.0%, FPR: 0.0%.
+5. Switch to **2. Investigate Alerts** to search, triage, add analyst notes, and download a binary `.pcap` capture.
 
-1. Import your GitHub repository (`kaushalhemant/soc-telemetry-detection-lab`) on [vercel.com/new](https://vercel.com/new).
-2. Set Framework Preset to **Other** and Root Directory to `./`.
-3. Click **Deploy**. Vercel will automatically build from [`api/index.py`](api/index.py) using the [`vercel.json`](vercel.json) rewrites.
-
-Or deploy via terminal:
+### Option B: Via the REST API
 ```bash
-vercel --prod
+# Run deterministic detection validation suite
+curl -X POST http://127.0.0.1:8000/api/detection-tests/run
+
+# Trigger a specific attack scenario
+curl -X POST http://127.0.0.1:8000/api/simulate \
+  -H "Content-Type: application/json" \
+  -d '{"scenario": "brute_force", "num_failures": 7}'
+
+# Query honest detection metrics
+curl http://127.0.0.1:8000/api/metrics
+
+# Clear alerts and reset metrics to uninitialized state
+curl -X POST http://127.0.0.1:8000/api/alerts/clear
+```
+
+### Option C: Via Endpoint Collector Agent
+```bash
+# Stream genuine process telemetry from target host
+python agent/collector.py --server http://127.0.0.1:8000 --interval 3.0
 ```
 
 ---
 
-## 📊 SOC Metrics & Triage Workflow
+## 🔒 Security Review & Data Handling
 
-The lab tracks real-time SOC operational metrics based on analyst triage actions:
+1. **Input Validation & Payload Size Limits**:
+   - `/api/v1/ingest`: Enforces maximum batch limit of 500 events per request.
+   - `/api/v1/client-device/telemetry`: Enforces limit of 100 events per request.
+   - `/api/v1/burp/ingest`: Enforces 2MB maximum payload size with DTD entity resolution disabled (`resolve_entities=False`) to prevent XML External Entity (XXE) expansion attacks.
+   - `/api/simulate`: Clamped to `num_failures <= 100` to prevent resource exhaustion.
+   - `/api/alerts/{id}/triage`: Notes constrained to 2,000 characters.
 
-$$\text{Precision} = \frac{\text{True Positives}}{\text{True Positives} + \text{False Positives}} \times 100\%$$
+2. **Authentication Notice**:
+   - The API endpoints currently operate unauthenticated to support local demonstration and student lab use.
+   - **Production Requirement**: For enterprise or multi-tenant deployments, endpoints must be placed behind a reverse proxy (e.g., Nginx, Envoy) with TLS encryption, API key verification, and OAuth2/OIDC authentication.
 
-$$\text{Recall} = \frac{\text{True Positives}}{\text{True Positives} + \text{False Negatives}} \times 100\%$$
+3. **Data Isolation**:
+   - Ingested events, alerts, and metrics are stored in process memory. Multi-user concurrent sessions share the same lab state.
 
-* **Analyst Triage States**: `NEW` ➔ `INVESTIGATING` ➔ `ESCALATED` / `CLOSED`
-* **One-Click Rule Tuning**: Automatically updates rule thresholds and conditions to suppress false positives while maintaining high recall.
+4. **Secrets and Credentials**:
+   - Zero hardcoded credentials, secret keys, or real production access tokens exist in the repository.
+
+---
+
+## ☁️ Vercel Serverless Deployment & Architecture Note
+
+The project includes an ASGI entrypoint at `api/index.py` configured via `vercel.json` for one-click deployment:
+
+1. Import repository on [vercel.com](https://vercel.com).
+2. Framework Preset: **Other**, Root Directory: `./`.
+3. Deploy.
+
+> ⚠️ **Serverless Architecture Limitations**:
+> * **Ephemeral State**: Vercel executes serverless Python functions in ephemeral Lambda environments. In-memory state (alerts, ingested devices, log buffers) does not persist across cold starts.
+> * **WebSockets**: Real-time WebSockets are not supported by Vercel Serverless Python functions. The web client gracefully falls back to periodic REST polling (`fetchMetrics`, `fetchInitialData`).
+> * **Background Streams**: Continuous background threads are disabled when `os.environ.get("VERCEL")` is detected to prevent execution timeouts.
+> * **Recommendation**: For persistent monitoring, long-running agent streaming, and live WebSockets, deploy via **Docker Compose** (`docker-compose up`) or on a persistent VPS.
 
 ---
 
 ## 📡 REST API Reference
 
-| Endpoint | Method | Description |
-| :--- | :--- | :--- |
-| `GET /` | `GET` | Interactive SOC Dashboard UI |
-| `POST /api/simulate` | `POST` | Trigger specific attack simulation scenarios |
-| `GET /api/telemetry` | `GET` | Fetch recent normalized telemetry stream |
-| `GET /api/alerts` | `GET` | Fetch generated detection alerts |
-| `POST /api/alerts/{alert_id}/triage` | `POST` | Update alert triage state (`INVESTIGATING`, `CLOSED`, etc.) |
-| `POST /api/alerts/{alert_id}/tune` | `POST` | Tune detection rule parameters for an alert |
-| `GET /api/metrics` | `GET` | Retrieve live SOC KPIs (Precision, Recall, FPR, MTTD) |
-| `GET /api/rules` | `GET` | Retrieve list of all loaded SIGMA rules |
-| `POST /api/rules/reload` | `POST` | Hot-reload all SIGMA YAML rules from disk dynamically |
-| `GET /api/rules/{rule_id}/export` | `GET` | Export SIGMA rule to **Splunk SPL** & **Elastic KQL** |
-| `GET /api/mitre/navigator` | `GET` | Download MITRE ATT&CK Navigator Layer JSON |
-| `GET /api/v1/devices` | `GET` | List all actively monitored endpoints and user client devices |
-| `POST /api/v1/client-device/register` | `POST` | Register a connected browser endpoint with hardware specifications |
-| `POST /api/v1/client-device/telemetry` | `POST` | Ingest real-time continuous browser client telemetry |
-| `POST /api/v1/ingest` | `POST` | Ingest telemetry batch from remote endpoint agents |
-| `GET /api/v1/agent/status` | `GET` | Query agent heartbeat status and total ingested telemetry counts |
-| `GET /api/v1/pcap/export/{alert_id}` | `GET` | Download synthesized Wireshark binary `.pcap` file |
-| `GET /api/v1/burp/export/{alert_id}` | `GET` | Export Burp Suite Repeater request & cURL command |
-| `POST /api/v1/burp/ingest` | `POST` | Ingest Burp Suite XML proxy logs |
-| `GET /api/v1/alerts/{alert_id}/report` | `GET` | Generate formal Forensic Incident Report |
-
----
-
-## 🧪 Automated Testing Suite
-
-The lab includes comprehensive unit and integration tests covering detection rules, stateful window correlation, SIEM transpilers, PCAP generators, and REST API endpoints:
-
-```bash
-pytest tests/ -v
-```
-
-```
-============================= test session starts =============================
-collected 26 items
-
-tests/test_engine.py ................                                    [ 61%]
-tests/test_integrations.py ......                                        [ 84%]
-tests/test_live_ingest.py ....                                           [100%]
-
-============================= 26 passed in 7.57s ==============================
-```
+| Endpoint | Method | Payload Limit | Description |
+| :--- | :--- | :--- | :--- |
+| `GET /` | `GET` | &mdash; | 3-Workflow SOC Workstation UI |
+| `POST /api/detection-tests/run` | `POST` | &mdash; | Executes 13-scenario deterministic detection validation suite |
+| `POST /api/simulate` | `POST` | `failures <= 100` | Trigger specific attack simulation scenario |
+| `GET /api/telemetry` | `GET` | `limit <= 200` | Fetch recent normalized telemetry stream |
+| `GET /api/alerts` | `GET` | `limit <= 200` | Fetch generated detection alerts |
+| `POST /api/alerts/{alert_id}/triage` | `POST` | `note <= 2000c` | Update alert triage state (`NEW`, `INVESTIGATING`, `CLOSED`) |
+| `POST /api/alerts/{alert_id}/tune` | `POST` | &mdash; | Tune detection rule parameters for an alert |
+| `GET /api/metrics` | `GET` | &mdash; | Retrieve live honest SOC KPIs (Precision, Recall, FPR, MTTD) |
+| `POST /api/alerts/clear` | `POST` | &mdash; | Clear alert queue, reset metrics engine, and flush logs |
+| `GET /api/rules` | `GET` | &mdash; | Retrieve list of all loaded SIGMA rules |
+| `POST /api/rules/reload` | `POST` | &mdash; | Hot-reload all SIGMA YAML rules from disk dynamically |
+| `GET /api/rules/{rule_id}/export` | `GET` | &mdash; | Export SIGMA rule to **Splunk SPL** & **Elastic KQL** |
+| `GET /api/mitre/navigator` | `GET` | &mdash; | Download MITRE ATT&CK Navigator Layer JSON |
+| `GET /api/v1/devices` | `GET` | &mdash; | List actively monitored endpoints and browser clients |
+| `POST /api/v1/client-device/register` | `POST` | Bounded model | Register connected browser endpoint with specs |
+| `POST /api/v1/client-device/telemetry` | `POST` | Max 100 events | Ingest real-time browser client telemetry |
+| `POST /api/v1/ingest` | `POST` | Max 500 events | Ingest telemetry batch from remote endpoint agent |
+| `GET /api/v1/agent/status` | `GET` | &mdash; | Query agent heartbeat status and total ingested counts |
+| `GET /api/v1/pcap/export/{alert_id}` | `GET` | &mdash; | Download genuine binary Wireshark `.pcap` capture file |
+| `GET /api/v1/burp/export/{alert_id}` | `GET` | &mdash; | Export Burp Suite Repeater request & cURL command |
+| `POST /api/v1/burp/ingest` | `POST` | Max 2MB XML | Ingest Burp Suite XML proxy logs (XXE-safe) |
+| `GET /api/v1/alerts/{alert_id}/report` | `GET` | &mdash; | Generate formal Forensic Incident Report JSON |
 
 ---
 
@@ -258,33 +300,40 @@ tests/test_live_ingest.py ....                                           [100%]
 
 ```
 .
-├── bridge.py               # Universal Live Endpoint Telemetry Bridge & CLI Forwarder
-├── setup_and_run.py        # One-Command Quickstart Launcher (Hot Reload enabled)
+├── setup_and_run.py        # Automated Local Launcher (Hot Reload enabled)
+├── bridge.py               # Live Endpoint Telemetry Bridge & CLI Forwarder
 ├── api/                    # Vercel Serverless Function & Cloud Entrypoint
 │   ├── index.py            # ASGI Application Entrypoint
 │   └── requirements.txt    # Serverless Dependencies
-├── agent/                  # Endpoint Collector Agent (remote telemetry ingestion)
-│   └── collector.py
+├── agent/                  # Endpoint Collector Agent (psutil host telemetry)
+│   ├── collector.py        # Process and system telemetry collector
+│   └── remote_probe.py     # Remote heartbeat probe
 ├── engine/                 # Core Detection & Analytics Engine
 │   ├── alert_manager.py    # Alert lifecycle, state tracking, and tuning
-│   ├── burp_integrator.py # Burp Suite XML parser & HTTP exporter
+│   ├── burp_integrator.py  # Burp Suite XML parser (XXE-safe) & HTTP exporter
 │   ├── detection_engine.py # Main SIGMA event matching & window correlation
+│   ├── detection_validator.py # Deterministic validation test suite (13 scenarios)
 │   ├── exporter.py         # Splunk SPL, Elastic KQL, & MITRE Navigator exporters
-│   ├── metrics.py          # Real-time SOC metric calculation engine
-│   ├── pcap_analyzer.py    # Wireshark .pcap generator & filter exporter
-│   └── rule_parser.py     # SIGMA YAML rule parser
+│   ├── metrics.py          # Rigorous SOC metric calculation engine
+│   ├── pcap_analyzer.py    # Genuine binary Wireshark .pcap generator
+│   └── rule_parser.py      # SIGMA YAML rule parser
 ├── generator/              # Attack Simulation & Telemetry Generator
-│   ├── attack_simulators.py# Scenario-based payload generators
-│   ├── log_generator.py   # Background telemetry generator
-│   └── models.py          # Pydantic data models & enums
+│   ├── attack_simulators.py# Scenario-based payload generators with ground truth
+│   ├── log_generator.py    # Background telemetry stream generator
+│   └── models.py           # Pydantic data models & telemetry enums
 ├── rules/                  # SIGMA Detection Rules (YAML format)
-├── docs/                   # Incident Case Studies & Forensic Guides
+├── docs/                   # Incident Case Studies & Architectural Guides
 │   └── INCIDENT_CASE_STUDY.md
-├── tests/                  # Automated Test Suite (26 test cases)
-│   ├── test_engine.py
-│   ├── test_integrations.py
-│   └── test_live_ingest.py
+├── tests/                  # Automated Test Suite (33 test cases)
+│   ├── test_engine.py      # Detection rules and sliding windows
+│   ├── test_integrations.py# PCAP generation & Burp XML parsing
+│   ├── test_live_ingest.py # Agent ingestion & device acquisition
+│   └── test_metrics.py     # Zero denominators, honest math, validator API
 ├── web/                    # SOC Web Application (FastAPI + WebSocket UI)
+│   ├── index.html          # Accessible 3-workflow workstation interface
+│   ├── css/style.css       # Responsive styling, source tags, validation card
+│   ├── js/app.js           # Workflow controller, search/filter, validator runner
+│   └── server.py           # FastAPI application server & REST endpoints
 ├── vercel.json             # Vercel Cloud Serverless Deployment Configuration
 ├── Dockerfile              # Container Dockerfile
 ├── docker-compose.yml      # Container Orchestration

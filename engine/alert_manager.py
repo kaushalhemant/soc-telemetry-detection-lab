@@ -54,7 +54,9 @@ class AlertManager:
             },
             status=TriageStatus.NEW,
             analyst_notes=[],
-            tuned=False
+            tuned=False,
+            telemetry_source=getattr(primary_event, "telemetry_source", "simulated"),
+            ground_truth_label=getattr(primary_event, "ground_truth", None)
         )
 
         self.alert_history.insert(0, alert)  # Keep latest at top

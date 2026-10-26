@@ -512,7 +512,9 @@ def generate_baseline_traffic(
                 process_name="nginx",
                 event_id="WEB_NORMAL_ACCESS",
                 raw_message=raw,
-                details={"status_code": 200, "path": "/api/v1/health"}
+                details={"status_code": 200, "path": "/api/v1/health"},
+                telemetry_source="simulated",
+                ground_truth="benign"
             ))
         else:
             # Normal SSH auth success
@@ -530,7 +532,9 @@ def generate_baseline_traffic(
                 process_id=1500 + i,
                 event_id="SSH_AUTH_SUCCESS",
                 raw_message=raw,
-                details={"auth_method": "publickey", "port": port}
+                details={"auth_method": "publickey", "port": port},
+                telemetry_source="simulated",
+                ground_truth="benign"
             ))
 
     return events

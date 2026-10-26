@@ -1,10 +1,10 @@
 import os
 import asyncio
-from typing import List
+from typing import List, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import sys
 
@@ -18,6 +18,7 @@ for p in [PROJECT_ROOT, os.getcwd()]:
 from generator.models import LogEvent, DetectionAlert, ScenarioType, TriageStatus, LogType
 from generator.log_generator import TelemetryGenerator
 from engine.detection_engine import DetectionEngine
+from engine.detection_validator import DetectionValidator
 from engine.exporter import SigmaExporter
 from engine.pcap_analyzer import PcapAnalyzer
 from engine.burp_integrator import BurpIntegrator
@@ -45,6 +46,7 @@ STATIC_DIR = BASE_DIR
 # Core Lab Components
 telemetry_gen = TelemetryGenerator()
 detection_engine = DetectionEngine(rules_dir=RULES_DIR)
+detection_validator = DetectionValidator(rules_dir=RULES_DIR)
 
 # Connect Generator to Detection Engine
 telemetry_gen.register_listener(detection_engine.process_event)
@@ -105,11 +107,8 @@ telemetry_gen.register_listener(sync_event_broadcast)
 detection_engine.register_alert_listener(sync_alert_broadcast)
 
 def seed_initial_lab_state():
-    """Seeds initial baseline telemetry and attack scenario alerts for instant rendering on serverless hosts."""
-    if len(detection_engine.alert_manager.get_all_alerts()) == 0:
-        telemetry_gen.trigger_scenario(ScenarioType.BRUTE_FORCE)
-        telemetry_gen.trigger_scenario(ScenarioType.ANOMALOUS_PROCESS)
-        telemetry_gen.trigger_scenario(ScenarioType.PRIVILEGE_ESCALATION)
+    """Initializes lab state cleanly without fabricating alerts or events."""
+    pass
 
 try:
     seed_initial_lab_state()
@@ -135,14 +134,14 @@ app = FastAPI(title="SOC Telemetry Detection Lab Engine API", version="1.0.0", l
 # API Endpoints
 class SimulationRequest(BaseModel):
     scenario: ScenarioType
-    source_ip: str = None
-    target_user: str = "root"
-    hostname: str = "host-node-alpha"
-    num_failures: int = 7
+    source_ip: Optional[str] = Field(default=None, max_length=64)
+    target_user: str = Field(default="root", max_length=128)
+    hostname: str = Field(default="host-node-alpha", max_length=128)
+    num_failures: int = Field(default=7, ge=1, le=100)
 
 class TriageRequest(BaseModel):
     status: TriageStatus
-    note: str = None
+    note: Optional[str] = Field(default=None, max_length=2000)
 
 @app.post("/api/simulate")
 def trigger_simulation(req: SimulationRequest):
@@ -391,6 +390,9 @@ def ingest_client_telemetry(payload: ClientTelemetryBatchRequest):
     Ingests continuous telemetry streamed automatically from connected user browsers / devices.
     """
     global ingested_events_count
+    if len(payload.events) > 100:
+        raise HTTPException(status_code=400, detail="Client telemetry batch exceeds limit of 100 events.")
+
     import uuid
     now = get_utc_now_str()
 
@@ -414,7 +416,9 @@ def ingest_client_telemetry(payload: ClientTelemetryBatchRequest):
                 command_line=evt_dict.get("command_line", ""),
                 event_id=evt_dict.get("event_id", "CLIENT_TELEMETRY"),
                 raw_message=evt_dict.get("raw_message") or f"Client telemetry event on {payload.hostname}",
-                details=evt_dict.get("details", {})
+                details=evt_dict.get("details", {}),
+                telemetry_source="live",
+                ground_truth=None
             )
             detection_engine.process_event(log_evt)
             sync_event_broadcast(log_evt)
@@ -452,6 +456,9 @@ def ingest_live_telemetry(payload: IngestBatchRequest):
     Ingests live host events from remote or local endpoint agents.
     """
     global ingested_events_count
+    if len(payload.events) > 500:
+        raise HTTPException(status_code=400, detail="Batch size exceeds maximum limit of 500 events.")
+
     import uuid
     now = get_utc_now_str()
 
@@ -500,7 +507,9 @@ def ingest_live_telemetry(payload: IngestBatchRequest):
                 command_line=evt_dict.get("command_line"),
                 event_id=evt_dict.get("event_id", "LIVE_ENDPOINT_EVENT"),
                 raw_message=evt_dict.get("raw_message") or f"{evt_dict.get('process_name', 'proc')} execution on {payload.hostname}",
-                details=evt_dict.get("details", {})
+                details=evt_dict.get("details", {}),
+                telemetry_source="live",
+                ground_truth=None
             )
             # Route ingested live event through Detection Engine & Broadcaster
             detection_engine.process_event(log_evt)
@@ -519,19 +528,12 @@ def ingest_live_telemetry(payload: IngestBatchRequest):
 @app.get("/api/v1/agent/status")
 def get_agent_status():
     """Returns heartbeat and live telemetry ingestion statistics."""
-    count = max(1, len(active_devices))
-    devices_list = list(active_devices.values()) if active_devices else [{
-        "device_id": "host-node-alpha",
-        "hostname": "host-node-alpha",
-        "os": "Linux 5.15.0-88-generic (Ubuntu 22.04 LTS)",
-        "ip_address": "10.0.4.15",
-        "status": "ONLINE"
-    }]
+    devices_list = list(active_devices.values())
     return {
-        "active_agents_count": count,
+        "active_agents_count": len(devices_list),
         "agents": devices_list,
         "devices": devices_list,
-        "total_ingested_events": ingested_events_count + 142
+        "total_ingested_events": ingested_events_count
     }
 
 @app.get("/api/v1/alerts/{alert_id}/report")
@@ -600,12 +602,18 @@ def export_burp_repeater_request(alert_id: str):
     return BurpIntegrator.export_burp_repeater(to_dict(alert))
 
 class BurpIngestRequest(BaseModel):
-    xml_content: str
+    xml_content: str = Field(..., max_length=2_000_000)
 
 @app.post("/api/v1/burp/ingest")
 def ingest_burp_proxy_xml(payload: BurpIngestRequest):
     """Ingests Burp Suite XML proxy export logs into the live detection stream."""
-    events = BurpIntegrator.parse_burp_xml_logs(payload.xml_content)
+    try:
+        events = BurpIntegrator.parse_burp_xml_logs(payload.xml_content)
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+    except Exception as err:
+        raise HTTPException(status_code=400, detail=f"Failed to parse Burp XML payload: {err}")
+
     for evt in events:
         detection_engine.process_event(evt)
         sync_event_broadcast(evt)
@@ -627,7 +635,18 @@ def get_wireshark_filter(rule_id: str):
 @app.post("/api/alerts/clear")
 def clear_alerts():
     detection_engine.alert_manager.clear_alerts()
+    detection_engine.metrics_engine.reset()
+    recent_logs.clear()
     return {"status": "cleared"}
+
+@app.post("/api/detection-tests/run")
+def run_detection_validation():
+    """
+    Executes a deterministic detection validation test suite using controlled,
+    benign and attack scenarios. Compares actual against expected detections
+    and returns a structured audit report with performance metrics.
+    """
+    return detection_validator.run_validation_suite()
 
 # WebSocket Endpoint
 @app.websocket("/ws/telemetry")

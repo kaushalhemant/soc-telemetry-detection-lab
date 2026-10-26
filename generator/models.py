@@ -34,6 +34,8 @@ class LogEvent(BaseModel):
     event_id: str
     raw_message: str
     details: Dict[str, Any] = Field(default_factory=dict)
+    telemetry_source: str = "simulated"
+    ground_truth: Optional[str] = None
 
 class TriageStatus(str, Enum):
     NEW = "NEW"
@@ -74,3 +76,6 @@ class DetectionAlert(BaseModel):
     status: TriageStatus = TriageStatus.NEW
     analyst_notes: List[str] = Field(default_factory=list)
     tuned: bool = False
+    telemetry_source: str = "simulated"
+    ground_truth_label: Optional[str] = None
+    detection_latency_ms: Optional[float] = None
