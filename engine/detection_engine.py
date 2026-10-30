@@ -58,7 +58,15 @@ class DetectionEngine:
         if listener not in self.alert_listeners:
             self.alert_listeners.append(listener)
 
-    def process_event(self, event: LogEvent) -> List[DetectionAlert]:
+    def reset(self):
+        """Resets all engine runtime buffers, cooldowns, watermarks, alerts, and metrics."""
+        self.event_buffers.clear()
+        self.alert_cooldowns.clear()
+        self.event_watermarks.clear()
+        self.alert_manager.clear_alerts()
+        self.metrics_engine.reset()
+
+    def process_event(self, event: LogEvent, bypass_cooldown: bool = False) -> List[DetectionAlert]:
         """Evaluate one event and return any generated alerts."""
         self.metrics_engine.record_event(event)
         generated_alerts = []
@@ -75,8 +83,8 @@ class DetectionEngine:
                 )
 
                 if (
-                    now_ts - self.alert_cooldowns.get(cooldown_key, 0.0)
-                    > 10.0
+                    bypass_cooldown
+                    or (now_ts - self.alert_cooldowns.get(cooldown_key, 0.0) > 10.0)
                 ):
                     alert = self.alert_manager.create_alert(rule, [event])
                     self.alert_cooldowns[cooldown_key] = now_ts
@@ -126,8 +134,8 @@ class DetectionEngine:
                 cooldown_key = f"{rule.id}:{group_key}"
 
                 if (
-                    now_ts - self.alert_cooldowns.get(cooldown_key, 0.0)
-                    > 20.0
+                    bypass_cooldown
+                    or (now_ts - self.alert_cooldowns.get(cooldown_key, 0.0) > 20.0)
                 ):
                     matched_events = [evt for _, evt in active_buf]
 

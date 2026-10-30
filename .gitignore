@@ -45,3 +45,8 @@ htmlcov/
 *.log
 *.sqlite3
 *.db
+
+# Checkpoints & Telemetry Caches
+*checkpoint*.json
+*.ckpt
+*.tmp

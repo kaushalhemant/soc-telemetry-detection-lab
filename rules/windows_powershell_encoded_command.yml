@@ -1,0 +1,31 @@
+id: RULE-WIN-001
+title: Suspicious PowerShell Encoded Command Execution
+description: Detects PowerShell process execution with encoded command flags (-EncodedCommand, -enc) used to obfuscate scripts and evade detection.
+status: production
+author: SOC Detection Lab
+date: 2026/02/15
+severity: HIGH
+
+log_source:
+  log_type: windows.sysmon
+
+detection:
+  selection:
+    event_id: SYSMON_PROCESS_CREATE
+  condition:
+    - field: process_name
+      operator: in
+      value: ["powershell.exe", "pwsh.exe"]
+    - field: command_line
+      operator: contains_any
+      value: ["-encodedcommand", "-enc ", "-encod ", "-encoded ", "/enc "]
+
+tags:
+  mitre_tactic: Execution
+  mitre_technique_id: T1059.001
+  mitre_technique_name: "Command and Scripting Interpreter: PowerShell"
+
+remediation:
+  - Decode and inspect the base64-encoded command payload using PowerShell script block logging (Event ID 4104).
+  - Trace the parent process to establish the initial infection vector.
+  - Terminate the suspicious PowerShell process tree and isolate the affected host.

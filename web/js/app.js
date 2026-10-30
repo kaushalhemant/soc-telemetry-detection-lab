@@ -414,15 +414,22 @@ function appendTelemetryLog(evt) {
   const timeStr = evt.timestamp ? evt.timestamp.substring(11, 23) : "12:00:00.000";
   const source = evt.telemetry_source || "simulated";
   const sourceLabel = source === "live" ? "LIVE" : source === "replayed" ? "REPLAY" : "SIM";
+  const isSysmon = evt.log_type === "windows.sysmon" || (evt.details && evt.details.sysmon_event_id);
+  const sysmonEid = evt.details && evt.details.sysmon_event_id ? evt.details.sysmon_event_id : (evt.event_id && evt.event_id.startsWith("SYSMON_") ? evt.event_id.replace("SYSMON_", "") : "");
+
+  let sourceBadgeHtml = `<span class="source-badge ${source}">${sourceLabel}</span>`;
+  if (isSysmon) {
+    sourceBadgeHtml = `<span class="source-badge sysmon" title="Windows Sysmon Operational Telemetry">SYSMON ${sysmonEid ? 'EID ' + sysmonEid : 'LIVE'}</span>`;
+  }
 
   consoleBoxes.forEach(consoleBox => {
     const row = document.createElement("div");
     row.className = "log-row";
     row.innerHTML = `
-      <span class="source-badge ${source}">${sourceLabel}</span>
+      ${sourceBadgeHtml}
       <span class="log-ts">${timeStr}</span>
-      <span class="log-type">${evt.log_type}</span>
-      <span class="log-host">${evt.hostname}${evt.container_id ? ' (' + evt.container_id + ')' : ''}</span>
+      <span class="log-type ${isSysmon ? 'sysmon' : ''}">${escapeHtml(evt.log_type)}</span>
+      <span class="log-host">${escapeHtml(evt.hostname)}${evt.container_id ? ' (' + escapeHtml(evt.container_id) + ')' : ''}</span>
       <span class="log-msg">${escapeHtml(evt.raw_message)}</span>
     `;
 
@@ -597,6 +604,185 @@ async function triggerScenario(scenarioType, btn) {
       }, 1000);
     }
   }
+/* ==========================================================================
+   Master 1-Click Demonstration Workflow
+   ========================================================================== */
+async function runMasterDemonstration(btn) {
+  const originalText = btn ? btn.innerHTML : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner"></span> Running Master Demo...`;
+  }
+  const resultsBox = document.getElementById("demo-results-box");
+  if (resultsBox) {
+    resultsBox.style.display = "block";
+    resultsBox.innerHTML = `
+      <div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 12px;">
+        <span class="spinner" style="margin-right: 8px;"></span>
+        Executing Master SOC Demonstration (feeding 50+ labelled events through SIGMA engine)...
+      </div>
+    `;
+  }
+  showActionStatus("Executing Master SOC Demonstration Workflow...", "loading");
+
+  try {
+    const res = await fetch("/api/demo/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reset_first: true })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.alerts) activeAlerts = data.alerts;
+      if (data.metrics) updateMetricsUi(data.metrics);
+      renderAlerts();
+      renderDemoResults(data);
+
+      const prec = data.metrics.precision_pct !== null ? `${data.metrics.precision_pct.toFixed(1)}%` : 'N/A';
+      const rec = data.metrics.recall_pct !== null ? `${data.metrics.recall_pct.toFixed(1)}%` : 'N/A';
+      showActionStatus(`Master Demo complete: ${data.events_processed} events processed, ${data.alerts_generated} alerts created. Precision: ${prec}, Recall: ${rec}.`, "success");
+    } else {
+      if (resultsBox) {
+        resultsBox.innerHTML = `<div class="empty-state" style="color: #f85149;">Failed to run demonstration (${res.status}).</div>`;
+      }
+      showActionStatus("Failed to run master demonstration workflow.", "error");
+    }
+  } catch (err) {
+    console.error("[Master Demo Error]", err);
+    if (resultsBox) {
+      resultsBox.innerHTML = `<div class="empty-state" style="color: #f85149;">Demo error: ${err.message}</div>`;
+    }
+    showActionStatus(`Demo error: ${err.message}`, "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = originalText || `⚡ Run Master Demonstration (50+ Events)`;
+    }
+  }
+}
+
+function renderDemoResults(data) {
+  const resultsBox = document.getElementById("demo-results-box");
+  if (!resultsBox) return;
+
+  const m = data.metrics || {};
+  const cm = data.confusion_matrix || {};
+  const prec = m.precision_pct !== null && m.precision_pct !== undefined ? `${m.precision_pct.toFixed(1)}%` : 'N/A';
+  const rec = m.recall_pct !== null && m.recall_pct !== undefined ? `${m.recall_pct.toFixed(1)}%` : 'N/A';
+  const fpr = m.false_positive_rate_pct !== null && m.false_positive_rate_pct !== undefined ? `${m.false_positive_rate_pct.toFixed(2)}%` : 'N/A';
+  const mttd = m.mttd_ms !== null && m.mttd_ms !== undefined ? `${m.mttd_ms.toFixed(1)} ms` : 'N/A';
+
+  resultsBox.innerHTML = `
+    <div class="val-summary-row" style="background-color: #0d1522; border-color: #26364b;">
+      <div class="val-stat">
+        <span class="val-stat-label">Total Events Processed</span>
+        <span class="val-stat-val" style="color: #58a6ff;">${data.events_processed}</span>
+      </div>
+      <div class="val-stat">
+        <span class="val-stat-label">Detections Generated</span>
+        <span class="val-stat-val text-green">${data.alerts_generated}</span>
+      </div>
+      <div class="val-stat">
+        <span class="val-stat-label">True Positives (TP)</span>
+        <span class="val-stat-val text-green">${cm.true_positives || 0}</span>
+      </div>
+      <div class="val-stat">
+        <span class="val-stat-label">False Positives (FP)</span>
+        <span class="val-stat-val" style="color: ${cm.false_positives > 0 ? '#f85149' : 'var(--text-muted)'};">${cm.false_positives || 0}</span>
+      </div>
+      <div class="val-stat">
+        <span class="val-stat-label">False Negatives (FN)</span>
+        <span class="val-stat-val" style="color: #d29922;">${cm.false_negatives || 0}</span>
+      </div>
+      <div class="val-stat">
+        <span class="val-stat-label">True Negatives (TN)</span>
+        <span class="val-stat-val">${cm.true_negatives || 0}</span>
+      </div>
+      <div class="val-stat">
+        <span class="val-stat-label">Precision (TP / TP+FP)</span>
+        <span class="val-stat-val text-green">${prec}</span>
+      </div>
+      <div class="val-stat">
+        <span class="val-stat-label">Recall (TP / TP+FN)</span>
+        <span class="val-stat-val text-green">${rec}</span>
+      </div>
+      <div class="val-stat">
+        <span class="val-stat-label">False Positive Rate</span>
+        <span class="val-stat-val" style="color: #79c0ff;">${fpr}</span>
+      </div>
+      <div class="val-stat">
+        <span class="val-stat-label">MTTD</span>
+        <span class="val-stat-val" style="color: #e3b341;">${mttd}</span>
+      </div>
+    </div>
+
+    <div class="val-table-container" style="margin-top: 10px;">
+      <table class="val-table">
+        <thead>
+          <tr>
+            <th>Scenario ID</th>
+            <th>Threat Vector Description</th>
+            <th>Ground Truth</th>
+            <th>Target SIGMA Rule</th>
+            <th>Outcome & Efficacy</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${(data.scenarios_evaluated || []).map(sc => `
+            <tr>
+              <td><code>${sc.id}</code></td>
+              <td><strong>${escapeHtml(sc.name)}</strong></td>
+              <td><span class="tag tag-${sc.ground_truth === 'malicious' ? 'tp' : 'tn'}">${(sc.ground_truth || '').toUpperCase()}</span></td>
+              <td><code>${sc.target_rule || 'NONE (Baseline)'}</code></td>
+              <td>
+                <span class="tag ${sc.outcome.includes('DETECTED') ? 'tag-tp' : sc.outcome.includes('EVADED') ? 'tag-fn' : 'tag-tn'}">
+                  ${escapeHtml(sc.outcome)}
+                </span>
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 11px;">
+      <span style="color: var(--text-muted);">
+        💡 Next Step: Switch to <strong>"2. Investigate Alerts"</strong> tab to triage alerts, download Wireshark PCAPs, export Burp requests, and tune rules.
+      </span>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-sm btn-secondary" onclick="downloadDemoReport('markdown')">📄 Download Markdown Report</button>
+        <a class="btn btn-sm btn-outline" href="/api/demo/report?format=html" target="_blank" rel="noopener noreferrer">🌐 Open HTML Report</a>
+      </div>
+    </div>
+  `;
+}
+
+async function resetDemoSession() {
+  showActionStatus("Resetting demonstration session and metrics...", "loading");
+  try {
+    const res = await fetch("/api/demo/reset", { method: "POST" });
+    if (res.ok) {
+      const data = await res.json();
+      activeAlerts = [];
+      renderAlerts();
+      if (data.metrics) updateMetricsUi(data.metrics);
+      clearTelemetry();
+      const demoBox = document.getElementById("demo-results-box");
+      if (demoBox) demoBox.style.display = "none";
+      const valBox = document.getElementById("validation-results-box");
+      if (valBox) valBox.style.display = "none";
+      showActionStatus("Demonstration session reset successfully. Metrics cleared.", "success");
+    } else {
+      showActionStatus("Failed to reset demonstration session.", "error");
+    }
+  } catch (err) {
+    showActionStatus(`Reset error: ${err.message}`, "error");
+  }
+}
+
+function downloadDemoReport(format = "markdown") {
+  window.open(`/api/demo/report?format=${format}`, "_blank");
 }
 
 async function runDeterministicValidation() {
@@ -826,6 +1012,85 @@ async function openRemediationModal(alertId) {
     const src = alert.telemetry_source || "simulated";
     sourceBadge.className = `source-badge ${src}`;
     sourceBadge.innerText = src === "live" ? "LIVE TELEMETRY" : src === "replayed" ? "REPLAYED LOG" : "SIMULATED TEST";
+  }
+
+  // Ground truth badge
+  const gtBadge = document.getElementById("modal-ground-truth-badge");
+  if (gtBadge) {
+    const gt = alert.ground_truth_label || (alert.details && alert.details.ground_truth);
+    if (gt === "malicious" || gt === "attack") {
+      gtBadge.innerHTML = `<span class="tag tag-tp">MALICIOUS</span>`;
+    } else if (gt === "benign") {
+      gtBadge.innerHTML = `<span class="tag tag-tn">BENIGN</span>`;
+    } else {
+      gtBadge.innerHTML = `<span class="tag" style="background:#21262d; color:#8b949e;">UNLABELED</span>`;
+    }
+  }
+
+  // Classification badge
+  const clsBadge = document.getElementById("modal-classification-badge");
+  if (clsBadge) {
+    const cls = alert.classification || (alert.ground_truth_label === "malicious" ? "TP" : alert.ground_truth_label === "benign" ? "FP" : null);
+    if (cls === "TP") {
+      clsBadge.innerHTML = `<span class="tag tag-tp">TRUE POSITIVE</span>`;
+    } else if (cls === "FP") {
+      clsBadge.innerHTML = `<span class="tag tag-fp">FALSE POSITIVE</span>`;
+    } else {
+      clsBadge.innerHTML = `<span class="tag" style="background:#21262d; color:#8b949e;">LIVE STREAM</span>`;
+    }
+  }
+
+  // Latency badge
+  const latBadge = document.getElementById("modal-latency-badge");
+  if (latBadge) {
+    latBadge.innerText = alert.detection_latency_ms !== null && alert.detection_latency_ms !== undefined ? `${alert.detection_latency_ms} ms` : 'N/A';
+  }
+
+  // Trigger rationale
+  const ratElem = document.getElementById("modal-trigger-rationale");
+  if (ratElem) {
+    ratElem.innerText = (alert.details && alert.details.trigger_reason) ? alert.details.trigger_reason : alert.description;
+  }
+
+  // Confidence assessment
+  const confElem = document.getElementById("modal-confidence-assessment");
+  if (confElem) {
+    confElem.innerText = (alert.details && alert.details.confidence_assessment) ? alert.details.confidence_assessment : "Detection rule pattern match. Verify with correlated endpoint telemetry.";
+  }
+
+  // Windows Sysmon Endpoint Telemetry Forensics
+  const sysmonBox = document.getElementById("modal-sysmon-forensics");
+  const pDetails = (alert.details && (alert.details.primary_event_details || alert.details)) || {};
+  const isSysmonAlert = (alert.rule_id && alert.rule_id.startsWith("RULE-WIN-")) || pDetails.sysmon_event_id || (pDetails.Channel && String(pDetails.Channel).includes("Sysmon"));
+  if (sysmonBox) {
+    if (isSysmonAlert) {
+      sysmonBox.style.display = "block";
+      const qname = pDetails.QueryName ? `<div class="sysmon-field-item"><span class="sysmon-field-key">DNS Query</span><span class="sysmon-field-val">${escapeHtml(pDetails.QueryName)}</span></div>` : '';
+      const qstat = pDetails.QueryStatus !== undefined && pDetails.QueryStatus !== null && pDetails.QueryStatus !== "" ? `<div class="sysmon-field-item"><span class="sysmon-field-key">DNS Query Status</span><span class="sysmon-field-val">${escapeHtml(String(pDetails.QueryStatus))}</span></div>` : '';
+      const srcSock = pDetails.SourceIp ? `<div class="sysmon-field-item"><span class="sysmon-field-key">Source Socket</span><span class="sysmon-field-val">${escapeHtml(pDetails.SourceIp)}:${pDetails.SourcePort || ''}</span></div>` : '';
+      const dstSock = pDetails.DestinationIp ? `<div class="sysmon-field-item"><span class="sysmon-field-key">Destination Socket</span><span class="sysmon-field-val">${escapeHtml(pDetails.DestinationIp)}:${pDetails.DestinationPort || ''}</span></div>` : '';
+
+      sysmonBox.innerHTML = `
+        <div style="font-weight: 600; color: #38bdf8; margin-bottom: 4px;">🪟 Windows Sysmon Endpoint Telemetry Forensics:</div>
+        <div class="sysmon-field-grid">
+          <div class="sysmon-field-item"><span class="sysmon-field-key">Event Source</span><span class="sysmon-field-val">Microsoft-Windows-Sysmon/Operational</span></div>
+          <div class="sysmon-field-item"><span class="sysmon-field-key">Sysmon Event ID</span><span class="sysmon-field-val">${pDetails.sysmon_event_id || alert.details.event_id || 'N/A'}</span></div>
+          <div class="sysmon-field-item"><span class="sysmon-field-key">Process Name</span><span class="sysmon-field-val">${escapeHtml(pDetails.process_name || pDetails.Image || alert.details.process_name || 'N/A')}</span></div>
+          <div class="sysmon-field-item"><span class="sysmon-field-key">Process ID (PID)</span><span class="sysmon-field-val">${pDetails.ProcessId || pDetails.process_id || 'N/A'}</span></div>
+          <div class="sysmon-field-item"><span class="sysmon-field-key">User</span><span class="sysmon-field-val">${escapeHtml(pDetails.User || pDetails.user || alert.details.user || 'N/A')}</span></div>
+          <div class="sysmon-field-item"><span class="sysmon-field-key">Parent Process</span><span class="sysmon-field-val">${escapeHtml(pDetails.ParentImage || pDetails.parent_process_name || 'N/A')}</span></div>
+          <div class="sysmon-field-item"><span class="sysmon-field-key">Command Line</span><span class="sysmon-field-val">${escapeHtml(pDetails.CommandLine || pDetails.command_line || 'N/A')}</span></div>
+          ${srcSock}
+          ${dstSock}
+          ${qname}
+          ${qstat}
+          ${pDetails.EventRecordID ? `<div class="sysmon-field-item"><span class="sysmon-field-key">EventRecordID</span><span class="sysmon-field-val">${pDetails.EventRecordID}</span></div>` : ''}
+        </div>
+      `;
+    } else {
+      sysmonBox.style.display = "none";
+      sysmonBox.innerHTML = "";
+    }
   }
 
   document.getElementById("modal-raw-logs").innerText = alert.sample_raw_logs ? alert.sample_raw_logs.join("\n") : "No raw logs recorded.";

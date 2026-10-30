@@ -1,0 +1,31 @@
+id: RULE-WIN-002
+title: Suspicious Script Interpreter and LOLBin Execution
+description: Detects execution of Windows script hosts or administrative binaries (wscript, cscript, mshta, certutil, rundll32) executing remote scripts or downloading files.
+status: production
+author: SOC Detection Lab
+date: 2026/02/15
+severity: HIGH
+
+log_source:
+  log_type: windows.sysmon
+
+detection:
+  selection:
+    event_id: SYSMON_PROCESS_CREATE
+  condition:
+    - field: process_name
+      operator: in
+      value: ["mshta.exe", "wscript.exe", "cscript.exe", "certutil.exe", "rundll32.exe"]
+    - field: command_line
+      operator: contains_any
+      value: ["javascript:", "vbscript:", "-urlcache", "-split", "http://", "https://", "ftp://"]
+
+tags:
+  mitre_tactic: Defense Evasion
+  mitre_technique_id: T1218
+  mitre_technique_name: "System Binary Proxy Execution"
+
+remediation:
+  - Block the referenced remote IP address or domain on perimeter firewalls and web proxies.
+  - Inspect any files created or modified by the script interpreter on the local filesystem.
+  - Enforce AppLocker or Windows Defender Application Control (WDAC) policies to block untrusted script execution.

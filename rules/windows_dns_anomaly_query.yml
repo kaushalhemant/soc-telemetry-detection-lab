@@ -1,0 +1,28 @@
+id: RULE-WIN-004
+title: Suspicious DNS Query for C2 or Tunneling Infrastructure
+description: Detects DNS resolution queries for dynamic DNS providers, out-of-band testing services, or tunneling domains commonly associated with malware staging and C2 beacons.
+status: production
+author: SOC Detection Lab
+date: 2026/02/15
+severity: MEDIUM
+
+log_source:
+  log_type: windows.sysmon
+
+detection:
+  selection:
+    event_id: SYSMON_DNS_QUERY
+  condition:
+    - field: details.QueryName
+      operator: contains_any
+      value: [".duckdns.org", ".ngrok.io", ".localtunnel.me", ".onion", "burpcollaborator.net", "interactsh.com", "oastify.com", "pastebin.com"]
+
+tags:
+  mitre_tactic: Command and Control
+  mitre_technique_id: T1071.004
+  mitre_technique_name: "Application Layer Protocol: DNS"
+
+remediation:
+  - Block the queried domain across all enterprise DNS resolvers and secure web gateways.
+  - Investigate the initiating process name and PID to determine which binary generated the lookup.
+  - Review subsequent network connections to identify if C2 sessions were established after DNS resolution.

@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg)](https://fastapi.tiangolo.com/)
 [![SIGMA Standard](https://img.shields.io/badge/Rules-SIGMA%20YAML-orange.svg)](https://github.com/SigmaHQ/sigma)
 [![MITRE ATT&CK](https://img.shields.io/badge/MITRE-ATT%26CK%20Mapped-red.svg)](https://attack.mitre.org/)
-[![Tests Passing](https://img.shields.io/badge/Tests-33%20Passed-3fb950.svg)](tests/)
+[![Tests Passing](https://img.shields.io/badge/Tests-55%20Passed-3fb950.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > **A real-time SOC detection engineering lab that ingests host, network, and proxy telemetry, evaluates multi-stage cyber attacks using SIGMA YAML rules and sliding temporal windows, and provides honest benchmark metrics, forensic packet exports, and SIEM query translations (Splunk SPL / Elastic KQL).**
@@ -17,9 +17,10 @@
 flowchart TD
     subgraph Telemetry Sources ["1. Telemetry Sources & Ingestion"]
         A1["🎯 Multi-Stage Attack Simulators<br/>(11 Attack Scenarios, Ground Truth: Attack)"]
-        A2["📡 Remote Endpoint Collector Agent<br/>(psutil Host Telemetry /api/v1/ingest)"]
-        A3["🌐 Burp Suite XML Proxy Ingest<br/>(XXE-Safe Parser, Telemetry: Replayed)"]
-        A4["🪵 Benign Baseline Traffic Generator<br/>(Normal User Traffic, Ground Truth: Benign)"]
+        A2["📡 Endpoint Collector Agent<br/>(psutil Processes & Socket Telemetry)"]
+        A3["🪟 Windows Sysmon Reader<br/>(EID 1, 3, 5, 22 Native Checkpoint Reader)"]
+        A4["🌐 Burp Suite XML Proxy Ingest<br/>(XXE-Safe Parser, Telemetry: Replayed)"]
+        A5["🪵 Benign Baseline Traffic Generator<br/>(Normal User Traffic, Ground Truth: Benign)"]
     end
 
     subgraph Core Engine ["2. Core Detection & Analytics Engine"]
@@ -43,6 +44,7 @@ flowchart TD
     A2 --> B1
     A3 --> B1
     A4 --> B1
+    A5 --> B1
     B1 --> B2
     B2 --> B3
     B3 --> B4
@@ -181,52 +183,250 @@ Run the full pytest suite covering rule evaluation, metrics calculation, forensi
 pytest -v
 
 # Or run specific test modules:
+pytest tests/test_demo_workflow.py -v # 1-Click Master demo run, reset, reports, deduplication
 pytest tests/test_metrics.py -v       # Zero denominators, honest metrics, validator
 pytest tests/test_engine.py -v        # Detection rules and sliding windows
 pytest tests/test_integrations.py -v  # Wireshark PCAP & Burp XML parsing
 pytest tests/test_live_ingest.py -v   # Agent telemetry and device acquisition
 ```
 
-Test suite baseline: **33 passed in ~7.9s (0 warnings)**.
+Test suite baseline: **37 passed in ~6.9s (0 warnings)**.
 
 ---
 
 ## 🎮 Running a Controlled Demo
 
-### Option A: Via the Web Dashboard
-1. Open `http://127.0.0.1:8000`.
-2. Stay on **1. Run Detection Test**.
-3. Click **▶ Run Deterministic Validation Suite (13 Scenarios)**.
-4. Review the generated validation matrix:
-   - 11 attack scenarios detected (`True Positives`).
-   - Sub-threshold brute force correctly ignored (`True Negative`).
-   - Benign background traffic correctly ignored (`True Negative`).
-   - 0 False Positives, 0 False Negatives.
-   - Precision: 100.0%, Recall: 100.0%, FPR: 0.0%.
-5. Switch to **2. Investigate Alerts** to search, triage, add analyst notes, and download a binary `.pcap` capture.
+### Option A: 1-Click Master Demonstration & Forensic Audit (Recommended for Presentations)
+1. Open **`http://127.0.0.1:8000`** in your browser.
+2. In **Workflow 1: Run Detection Test**, locate the **1-Click Master Demonstration Runner** card at the top.
+3. Click **▶ Run Master Demonstration (50 Calibrated Events)**:
+   - Evaluates 8 distinct attack and benign scenarios (SSH brute force, LSASS memory dump, DNS tunneling, privilege escalation, web shell, port scan reconnaissance, stealth evasion, and benign traffic) through the real detection engine.
+   - Computes true positive (TP), false positive (FP), true negative (TN), and false negative (FN) classifications.
+   - Calculates Precision, Recall, FPR, and Mean Time to Detect (MTTD).
+   - Generates an executive audit report with full confusion matrix and detection evidence.
+4. Click **📄 Export Report (.md)** or **🌐 View HTML Report** to view or save the formal audit document.
+5. Click **🔄 Reset Session** to cleanly flush session state and return metrics to uninitialized `N/A` status.
 
 ### Option B: Via the REST API
 ```bash
-# Run deterministic detection validation suite
+# 1. Run the master demonstration suite (processes 50 calibrated events)
+curl -X POST http://127.0.0.1:8000/api/demo/run
+
+# 2. Retrieve generated demonstration report (Markdown, HTML, or JSON)
+curl http://127.0.0.1:8000/api/demo/report?format=markdown
+curl http://127.0.0.1:8000/api/demo/report?format=html
+
+# 3. Query calculated honest metrics
+curl http://127.0.0.1:8000/api/metrics
+
+# 4. Reset demonstration session safely
+curl -X POST http://127.0.0.1:8000/api/demo/reset
+
+# 5. Run deterministic detection validation suite (13 scenarios)
 curl -X POST http://127.0.0.1:8000/api/detection-tests/run
 
-# Trigger a specific attack scenario
+# 6. Trigger an individual attack scenario
 curl -X POST http://127.0.0.1:8000/api/simulate \
   -H "Content-Type: application/json" \
   -d '{"scenario": "brute_force", "num_failures": 7}'
-
-# Query honest detection metrics
-curl http://127.0.0.1:8000/api/metrics
-
-# Clear alerts and reset metrics to uninitialized state
-curl -X POST http://127.0.0.1:8000/api/alerts/clear
 ```
 
-### Option C: Via Endpoint Collector Agent
+### Option C: Via Endpoint Collector Agent (Windows / Linux)
 ```bash
-# Stream genuine process telemetry from target host
+# Stream live process, network, and Windows Sysmon telemetry from host
 python agent/collector.py --server http://127.0.0.1:8000 --interval 3.0
+
+# Optional flags:
+#   --batch-size 100      (Events per batch, max 500)
+#   --no-sysmon           (Disable Sysmon monitoring; psutil-only)
+#   --checkpoint-dir DIR  (Custom persistent checkpoint location)
+#   --once                (Send a single batch and exit)
 ```
+
+---
+
+## 🪟 Microsoft Windows Sysmon Integration
+
+The lab includes a dedicated native endpoint telemetry integration for **Microsoft Windows Sysmon** (v15.22+) on Windows 11. The collector reads events directly from the Windows Event Log channel `Microsoft-Windows-Sysmon/Operational`, normalizes them into the unified `LogEvent` schema under `LogType.WINDOWS_SYSMON`, and streams them to the real-time detection engine.
+
+### 1. Collected Sysmon Event Types
+
+| Event ID | Sysmon Event Name | Normalized Event ID | Description & Extracted Fields |
+| :--- | :--- | :--- | :--- |
+| **1** | Process Create | `SYSMON_PROCESS_CREATE` | Process execution, `Image`, `CommandLine`, `ParentImage`, `ParentProcessId`, `User`, `ProcessGuid`, `Hashes` |
+| **3** | Network Connection | `SYSMON_NETWORK_CONNECT` | Outbound/inbound sockets, `SourceIp`, `SourcePort`, `DestinationIp`, `DestinationPort`, `Protocol`, `Image` |
+| **5** | Process Terminate | `SYSMON_PROCESS_TERMINATE` | Process termination lifecycle, `Image`, `ProcessId`, `User`, termination timestamp |
+| **22** | DNS Query | `SYSMON_DNS_QUERY` | Domain name resolutions, `QueryName`, `QueryStatus`, `QueryResults`, initiating `Image`, `ProcessId` |
+
+---
+
+### 2. Sysmon Installation & Configuration
+
+Sysmon runs as a background Windows service (`Sysmon64.exe`) and device driver to monitor system activity:
+
+1. **Download Sysmon**:
+   Download Microsoft Sysmon from the official [Microsoft Sysinternals Suite](https://learn.microsoft.com/en-us/sysinternals/downloads/sysmon).
+   Default executable location: `C:\Tools\Sysmon\Sysmon64.exe`.
+
+2. **Prepare Configuration (`C:\Tools\Sysmon\sysmon-config.xml`)**:
+   Ensure Event IDs 1, 3, 5, and 22 are enabled in the XML configuration schema:
+   ```xml
+   <Sysmon schemaversion="4.91">
+     <EventFiltering>
+       <!-- Include all ProcessCreate, ProcessTerminate, NetworkConnect, and DnsQuery -->
+       <ProcessCreate onmatch="exclude" />
+       <ProcessTerminate onmatch="exclude" />
+       <NetworkConnect onmatch="exclude" />
+       <DnsQuery onmatch="exclude" />
+     </EventFiltering>
+   </Sysmon>
+   ```
+
+3. **Install & Start Service (Elevated Command Prompt or PowerShell)**:
+   ```powershell
+   # Install with configuration
+   C:\Tools\Sysmon\Sysmon64.exe -i C:\Tools\Sysmon\sysmon-config.xml -accepteula
+
+   # Verify Sysmon service is RUNNING
+   Get-Service -Name "Sysmon64", "Sysmon"
+   ```
+
+---
+
+### 3. Required Windows Permissions & Security Channel Access (DACL)
+
+Windows Event Log channels containing security audit data enforce strict Discretionary Access Control Lists (DACL). Inspecting the channel configuration:
+```powershell
+wevtutil gl "Microsoft-Windows-Sysmon/Operational"
+```
+reveals the channel DACL:
+`O:BAG:SYD:(A;;0xf0007;;;SY)(A;;0x7;;;BA)(A;;0x1;;;BO)(A;;0x1;;;SO)(A;;0x1;;;S-1-5-32-573)`
+
+* `SY`: `NT AUTHORITY\SYSTEM` (Full Control)
+* `BA`: `Builtin\Administrators` (Read/Clear)
+* `S-1-5-32-573`: `Builtin\Event Log Readers` (Read-Only)
+
+#### Granting Read Permissions
+To collect live Sysmon telemetry, you must run the agent with either:
+1. **Administrator Privileges**: Open PowerShell / Terminal as **Run as Administrator**, then start `python agent/collector.py`.
+2. **Event Log Readers Group**: Add your non-elevated user account to the local `Event Log Readers` security group:
+   ```powershell
+   # Run in an elevated PowerShell session once:
+   net localgroup "Event Log Readers" $env:USERNAME /add
+   ```
+   *(Log out and back in for the security token group change to take effect).*
+
+> ⚠️ **Graceful Non-Elevated Degradation**: If the agent is run by an unprivileged user without access, the reader will **not crash**. It logs a clear notice instructing the user to elevate or join `Event Log Readers`, safely suppresses repeated access errors, and continues streaming standard `psutil` process and socket telemetry.
+
+---
+
+### 4. Agent Startup & Verification
+
+1. **Start the SOC Detection Engine Server**:
+   ```bash
+   python web/server.py
+   # Or with automatic reload:
+   python setup_and_run.py
+   ```
+   The engine web console is available at `http://127.0.0.1:8000`.
+
+2. **Start the Endpoint Collector Agent (in an Elevated PowerShell)**:
+   ```powershell
+   python agent/collector.py --server http://127.0.0.1:8000 --interval 3.0
+   ```
+   The banner displays:
+   ```
+   ======================================================================
+     🛡️  AUTONOMOUS ENDPOINT TELEMETRY AGENT
+     Agent ID   : agent-win-lab-01-xxxxxx
+     Host Device: WIN-LAB-01 (Windows 11)
+     Specs      : 12 Cores | 32.0 GB RAM | IP: 192.168.1.150
+     Sysmon     : ENABLED (Channel: Microsoft-Windows-Sysmon/Operational | Checkpoint: 10420)
+     Target SOC : http://127.0.0.1:8000/api/v1/ingest
+     Batch Size : 100 (Max limit: 500)
+     Interval   : 3.0s (Continuous Live Streaming)
+   ======================================================================
+   ```
+
+3. **Verify Local Sysmon Events in Windows**:
+   ```powershell
+   # Confirm Sysmon is generating events in Windows Event Viewer:
+   Get-WinEvent -LogName "Microsoft-Windows-Sysmon/Operational" -MaxEvents 5 | Format-Table TimeCreated, Id, Message -Wrap
+   ```
+
+4. **Verify Ingestion in SOC Console**:
+   * Navigate to `http://127.0.0.1:8000` in your browser.
+   * View **Live Telemetry Stream**: Sysmon events appear with distinct cyan **`SYSMON EID 1`**, **`SYSMON EID 3`**, **`SYSMON EID 5`**, and **`SYSMON EID 22`** badges.
+   * Query the Agent Status API endpoint:
+     ```bash
+     curl http://127.0.0.1:8000/api/v1/agent/status
+     ```
+
+---
+
+### 5. Persistent Checkpointing & Deduplication Architecture
+
+To prevent duplicate ingestion and avoid missing telemetry after restarts, `agent/sysmon_reader.py` implements an atomic persistent checkpointing state machine:
+
+1. **Persistent Location Outside Git**:
+   Checkpoints are saved outside the repository in the host's application data directory:
+   `%LOCALAPPDATA%\soc_telemetry_lab\checkpoints\sysmon_Microsoft-Windows-Sysmon_Operational_<hostname>_checkpoint.json`
+2. **Two-Phase Commit Protocol**:
+   * Events are read where `EventRecordID > checkpoint.last_record_id` in chronological order.
+   * The reader tracks `pending_record_id = max(record_ids)`.
+   * **Crucial Invariant**: The checkpoint is **never** advanced on disk before the HTTP request to `POST /api/v1/ingest` returns `HTTP 200` with `status: success`.
+   * If the SOC server is unreachable or fails, the batch is held in `agent.retry_buffer` and retried without advancing the checkpoint.
+3. **Atomic File Write Strategy**:
+   Checkpoints are written to a unique `.tmp` file in the destination folder, flushed to disk, and replaced using `os.replace` (atomic file swap on NTFS). This prevents file corruption if the agent process terminates abruptly.
+4. **Log Clearing & Reset Detection**:
+   If an administrator or attacker clears the Sysmon event log (`wevtutil cl Microsoft-Windows-Sysmon/Operational`), the channel's `EventRecordID` restarts from 1. The reader detects that the channel's newest record ID is strictly less than the stored checkpoint, logs an audit warning, and automatically resets the checkpoint to 0 to resume ingesting new events without stalling.
+5. **Deduplication Buffer**:
+   An in-memory sliding window deque (`maxlen=10000`) deduplicates identical record IDs, preventing replay loops.
+
+---
+
+### 6. Windows-Specific SIGMA Detection Rules
+
+Five dedicated Windows detection rules in SIGMA YAML format are loaded from `rules/`:
+
+1. **`RULE-WIN-001` — Suspicious PowerShell Encoded Command Execution** (`T1059.001` | High)
+   * Selection: Sysmon Event ID 1 (`SYSMON_PROCESS_CREATE`).
+   * Condition: PowerShell process (`powershell.exe`, `pwsh.exe`) executing with base64 encoding switches (`-EncodedCommand`, `-enc`, `/enc`).
+2. **`RULE-WIN-002` — Suspicious Script Interpreter & LOLBin Execution** (`T1218` | High)
+   * Selection: Sysmon Event ID 1 (`SYSMON_PROCESS_CREATE`).
+   * Condition: Script hosts and binaries (`wscript.exe`, `cscript.exe`, `mshta.exe`, `certutil.exe`, `rundll32.exe`) executing external protocols (`javascript:`, `vbscript:`, `http://`, `https://`, `-urlcache`).
+3. **`RULE-WIN-003` — Suspicious Outbound Network Connection by Script Interpreter** (`T1071.001` | High)
+   * Selection: Sysmon Event ID 3 (`SYSMON_NETWORK_CONNECT`).
+   * Condition: Shells or interpreters initiating outbound sockets to uncommon C2 ports (`1337`, `4444`, `5555`, `6666`, `7070`, `8888`, `9001`, `9999`).
+4. **`RULE-WIN-004` — Suspicious DNS Query for C2 or Tunneling Infrastructure** (`T1071.004` | Medium)
+   * Selection: Sysmon Event ID 22 (`SYSMON_DNS_QUERY`).
+   * Condition: Lookup queries directed at dynamic DNS providers, out-of-band testing collars, or staging domains (`.duckdns.org`, `.ngrok.io`, `.localtunnel.me`, `burpcollaborator.net`, `interactsh.com`, `oastify.com`, `pastebin.com`).
+5. **`RULE-WIN-005` — Critical Security Defense Process Termination** (`T1562.001` | Critical)
+   * Selection: Sysmon Event ID 5 (`SYSMON_PROCESS_TERMINATE`).
+   * Condition: Unexpected termination of core defensive processes (`sysmon.exe`, `sysmon64.exe`, `msmpeng.exe`, `nissrv.exe`, `csagent.exe`).
+
+---
+
+### 7. Troubleshooting Missing Sysmon Events
+
+| Symptom | Root Cause | Solution |
+| :--- | :--- | :--- |
+| `[SysmonReader] Access denied` | Non-elevated console without read permissions | Launch terminal as **Administrator** or add user account to `Event Log Readers` group. |
+| `[SysmonReader] Channel not found` | Microsoft Sysmon is not installed or enabled | Verify `Get-Service Sysmon64` is Running. Run `Sysmon64.exe -i sysmon-config.xml`. |
+| Zero events ingested | Event filtering excludes all activity or no new events | Verify `sysmon-config.xml` has `<ProcessCreate onmatch="exclude"/>`. Generate activity (e.g. open `cmd.exe`). |
+| Server reports `Connection refused` | SOC backend is not running | Start backend with `python web/server.py` before launching agent. |
+| Checkpoint does not advance | SOC API rejected batch or network timeout | Inspect `web/server.py` terminal logs for validation errors. Checkpoint advances only on HTTP 200. |
+
+---
+
+### 8. Implementation Limitations & Security Scope
+
+* **Transport Encryption Notice**: By default, the collector agent transmits JSON batches to `http://127.0.0.1:8000/api/v1/ingest` over unencrypted HTTP for local lab demonstration. Telemetry is **not encrypted in transit** unless an external TLS terminating reverse proxy (HTTPS) is configured.
+* **Separation of Telemetry Scopes**:
+  * **Synthetic Validation (`telemetry_source="simulated"`)**: Used in the deterministic test runner to validate ground-truth confusion matrix metrics (TP, FP, FN, TN).
+  * **Live Windows Telemetry (`telemetry_source="live"`)**: Genuine endpoint events from Sysmon and psutil. Unlabeled by default (`ground_truth=None`) to preserve forensic authenticity.
+  * **Ground-Truth Labeled Data**: Only applied during reproducible test benchmarks; ordinary live events are never artificially assigned attack ground-truth labels.
+* **Lab Scope**: The detection rules operate as deterministic SIGMA pattern matchers over real-time events. They do not constitute an enterprise EDR with heuristic behavioral ML, kernel driver hooks, or memory introspection.
 
 ---
 
@@ -272,6 +472,9 @@ The project includes an ASGI entrypoint at `api/index.py` configured via `vercel
 | Endpoint | Method | Payload Limit | Description |
 | :--- | :--- | :--- | :--- |
 | `GET /` | `GET` | &mdash; | 3-Workflow SOC Workstation UI |
+| `POST /api/demo/run` | `POST` | &mdash; | Run 1-Click Master Demonstration (50 calibrated events, 8 scenarios) |
+| `POST /api/demo/reset` | `POST` | &mdash; | Reset demo session, flush detection engine state & clear metrics |
+| `GET /api/demo/report` | `GET` | &mdash; | Export formal Demo Audit Report (`?format=markdown`, `html`, `json`) |
 | `POST /api/detection-tests/run` | `POST` | &mdash; | Executes 13-scenario deterministic detection validation suite |
 | `POST /api/simulate` | `POST` | `failures <= 100` | Trigger specific attack simulation scenario |
 | `GET /api/telemetry` | `GET` | `limit <= 200` | Fetch recent normalized telemetry stream |
@@ -305,9 +508,10 @@ The project includes an ASGI entrypoint at `api/index.py` configured via `vercel
 ├── api/                    # Vercel Serverless Function & Cloud Entrypoint
 │   ├── index.py            # ASGI Application Entrypoint
 │   └── requirements.txt    # Serverless Dependencies
-├── agent/                  # Endpoint Collector Agent (psutil host telemetry)
-│   ├── collector.py        # Process and system telemetry collector
-│   └── remote_probe.py     # Remote heartbeat probe
+├── agent/                  # Endpoint Collector Agent (psutil host telemetry & Sysmon)
+│   ├── collector.py        # Process, network, and Sysmon batch telemetry collector
+│   ├── remote_probe.py     # Remote heartbeat probe
+│   └── sysmon_reader.py    # Windows Sysmon event reader & atomic checkpoint manager
 ├── engine/                 # Core Detection & Analytics Engine
 │   ├── alert_manager.py    # Alert lifecycle, state tracking, and tuning
 │   ├── burp_integrator.py  # Burp Suite XML parser (XXE-safe) & HTTP exporter
@@ -316,19 +520,22 @@ The project includes an ASGI entrypoint at `api/index.py` configured via `vercel
 │   ├── exporter.py         # Splunk SPL, Elastic KQL, & MITRE Navigator exporters
 │   ├── metrics.py          # Rigorous SOC metric calculation engine
 │   ├── pcap_analyzer.py    # Genuine binary Wireshark .pcap generator
-│   └── rule_parser.py      # SIGMA YAML rule parser
+│   ├── report_generator.py # Demonstration audit report generator (MD, HTML, JSON)
+│   └── rule_parser.py      # Extended SIGMA YAML rule parser & conditions evaluator
 ├── generator/              # Attack Simulation & Telemetry Generator
 │   ├── attack_simulators.py# Scenario-based payload generators with ground truth
 │   ├── log_generator.py    # Background telemetry stream generator
-│   └── models.py           # Pydantic data models & telemetry enums
-├── rules/                  # SIGMA Detection Rules (YAML format)
+│   └── models.py           # Pydantic data models & telemetry enums (LogType.WINDOWS_SYSMON)
+├── rules/                  # SIGMA Detection Rules (16 YAML rules: 11 Linux + 5 Windows)
 ├── docs/                   # Incident Case Studies & Architectural Guides
 │   └── INCIDENT_CASE_STUDY.md
-├── tests/                  # Automated Test Suite (33 test cases)
+├── tests/                  # Automated Test Suite (55 test cases)
+│   ├── test_demo_workflow.py # 1-Click Master demonstration, reports, and reset
 │   ├── test_engine.py      # Detection rules and sliding windows
 │   ├── test_integrations.py# PCAP generation & Burp XML parsing
 │   ├── test_live_ingest.py # Agent ingestion & device acquisition
-│   └── test_metrics.py     # Zero denominators, honest math, validator API
+│   ├── test_metrics.py     # Zero denominators, honest math, validator API
+│   └── test_sysmon_integration.py # Sysmon XML parsing, checkpoints, and Windows rules
 ├── web/                    # SOC Web Application (FastAPI + WebSocket UI)
 │   ├── index.html          # Accessible 3-workflow workstation interface
 │   ├── css/style.css       # Responsive styling, source tags, validation card

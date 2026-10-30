@@ -10,6 +10,7 @@ class LogType(str, Enum):
     WEB_ACCESS = "web_access.log"
     CLIENT_TELEMETRY = "client.telemetry"
     BROWSER = "browser.log"
+    WINDOWS_SYSMON = "windows.sysmon"
 
 
 class SeverityLevel(str, Enum):
@@ -36,6 +37,7 @@ class LogEvent(BaseModel):
     details: Dict[str, Any] = Field(default_factory=dict)
     telemetry_source: str = "simulated"
     ground_truth: Optional[str] = None
+    scenario_id: Optional[str] = None
 
 class TriageStatus(str, Enum):
     NEW = "NEW"
@@ -56,6 +58,8 @@ class ScenarioType(str, Enum):
     KERBEROASTING = "kerberoasting"
     LSASS_DUMP = "lsass_dump"
     NORMAL_BASELINE = "normal_baseline"
+    RECONNAISSANCE = "reconnaissance"
+    STEALTH_EVASION = "stealth_evasion"
 
 class DetectionAlert(BaseModel):
     alert_id: str
@@ -79,3 +83,4 @@ class DetectionAlert(BaseModel):
     telemetry_source: str = "simulated"
     ground_truth_label: Optional[str] = None
     detection_latency_ms: Optional[float] = None
+    classification: Optional[str] = None

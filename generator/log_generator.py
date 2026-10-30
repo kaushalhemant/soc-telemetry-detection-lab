@@ -15,7 +15,10 @@ from .attack_simulators import (
     generate_kernel_driver_tampering_scenario,
     generate_kerberoasting_scenario,
     generate_lsass_dump_scenario,
-    generate_baseline_traffic
+    generate_baseline_traffic,
+    generate_reconnaissance_scenario,
+    generate_stealth_evasion_scenario,
+    generate_demonstration_dataset
 )
 
 class TelemetryGenerator:
@@ -42,11 +45,12 @@ class TelemetryGenerator:
             except Exception as e:
                 print(f"[TelemetryGenerator Error] Callback failed: {e}")
 
-    def emit_events(self, events: List[LogEvent]):
+    def emit_events(self, events: List[LogEvent], delay: float = 0.04):
         """Dispatches a list of events with slight realistic delays between events."""
         for evt in events:
             self.emit_event(evt)
-            time.sleep(0.05)  # Realistic rapid arrival burst
+            if delay > 0:
+                time.sleep(delay)
 
     def trigger_scenario(self, scenario: ScenarioType, **kwargs) -> List[LogEvent]:
         """Triggers a specific attack scenario and returns emitted events."""
@@ -74,10 +78,20 @@ class TelemetryGenerator:
             events = generate_lsass_dump_scenario(**kwargs)
         elif scenario == ScenarioType.NORMAL_BASELINE:
             events = generate_baseline_traffic(**kwargs)
+        elif scenario == ScenarioType.RECONNAISSANCE:
+            events = generate_reconnaissance_scenario(**kwargs)
+        elif scenario == ScenarioType.STEALTH_EVASION:
+            events = generate_stealth_evasion_scenario(**kwargs)
         else:
             events = generate_baseline_traffic(count=3)
 
         self.emit_events(events)
+        return events
+
+    def load_demonstration_dataset(self) -> List[LogEvent]:
+        """Loads and emits the full master demonstration dataset through the pipeline."""
+        events = generate_demonstration_dataset()
+        self.emit_events(events, delay=0.01)
         return events
 
     def start_background_stream(self, interval_seconds: float = 3.0):

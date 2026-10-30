@@ -10,6 +10,7 @@ import os
 import webbrowser
 import time
 import threading
+import socket
 
 if sys.platform == "win32":
     try:

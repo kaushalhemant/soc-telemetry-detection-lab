@@ -25,7 +25,7 @@
       </div>
       <div class="badge" id="agent-status-badge">Endpoints: <strong id="devices-count-badge">1 Live</strong></div>
       <div class="badge" id="current-client-badge" style="border-color: #388bfd; color: #58a6ff;">This Device: <strong id="my-device-name">Acquiring...</strong></div>
-      <div class="badge">Rules: <strong id="rules-count-badge">11 Loaded</strong></div>
+      <div class="badge">Rules: <strong id="rules-count-badge">16 Loaded</strong></div>
       <button class="btn-sm btn-warning" onclick="openManualModal()" aria-haspopup="dialog">📖 Lab User Manual &amp; Guide</button>
       <button class="btn-sm btn-primary" id="mode-toggle-btn" onclick="toggleEngineMode()">Mode: Live Production Ingest</button>
       <a class="btn-sm text-link" href="/api/mitre/navigator" target="_blank" rel="noopener noreferrer">ATT&amp;CK Navigator JSON</a>
@@ -80,6 +80,35 @@
        WORKFLOW 1: RUN DETECTION TEST
        ========================================================================= -->
   <main id="view-workflow-test" class="workflow-pane active" role="tabpanel" aria-labelledby="tab-workflow-test">
+    <!-- Master 1-Click Demonstration Runner Card -->
+    <section class="demo-card" aria-labelledby="demo-card-title">
+      <div class="val-header">
+        <div>
+          <div class="val-title" id="demo-card-title" style="color: #58a6ff;">
+            <span>🎯</span> Master Presentation Demonstration (1-Click Workflow)
+          </div>
+          <div class="val-subtitle">
+            Executes the complete, presentation-ready SOC demonstration: processes 50+ labelled synthetic events across 8 representative scenarios (Brute Force, SUID Priv Esc, Web Shell, DNS Exfil, LSASS Dump, Sub-threshold Logins, Benign Traffic, and Stealth Evasion). Evaluates detections against ground truth, calculates Precision, Recall, FPR, and MTTD, streams live logs, populates alerts, and unlocks full incident investigation and forensic report exports.
+          </div>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+          <button class="btn btn-primary" id="btn-run-master-demo" onclick="runMasterDemonstration(this)">
+            ⚡ Run Master Demonstration (50+ Events)
+          </button>
+          <button class="btn btn-secondary" onclick="downloadDemoReport('markdown')">
+            📄 Export Markdown Report
+          </button>
+          <a class="btn btn-outline" href="/api/demo/report?format=html" target="_blank" rel="noopener noreferrer">
+            🌐 View HTML Report
+          </a>
+          <button class="btn btn-outline" onclick="resetDemoSession()">
+            🔄 Reset Demo Session
+          </button>
+        </div>
+      </div>
+      <div id="demo-results-box" class="val-results-container" style="display: none;"></div>
+    </section>
+
     <!-- Deterministic Test Suite Runner Card -->
     <section class="val-card" aria-labelledby="val-card-title">
       <div class="val-header">
@@ -231,7 +260,7 @@
     <!-- Sub-tab Navigation for Exploration -->
     <nav class="view-tab-bar" style="background-color: #101827; border-bottom: 1px solid var(--border-color);" aria-label="Explore Subtabs">
       <button class="view-tab-btn active" id="subtab-explore-rules" onclick="switchExploreTab('rules')">
-        📜 SIGMA Rules Catalog (<span id="explore-rules-badge">11 Rules</span>)
+        📜 SIGMA Rules Catalog (<span id="explore-rules-badge">16 Rules</span>)
       </button>
       <button class="view-tab-btn" id="subtab-explore-tools" onclick="switchExploreTab('tools')">
         🔌 Tool Integrations (Wireshark &amp; Burp Suite)
@@ -361,7 +390,27 @@
             <span class="cell-label">Telemetry Source</span>
             <span class="cell-val" id="modal-source-badge"><span class="source-badge simulated">SIMULATED</span></span>
           </div>
+          <div class="detail-cell">
+            <span class="cell-label">Ground Truth</span>
+            <span class="cell-val" id="modal-ground-truth-badge"><span class="tag tag-tp">MALICIOUS</span></span>
+          </div>
+          <div class="detail-cell">
+            <span class="cell-label">Validation Efficacy</span>
+            <span class="cell-val" id="modal-classification-badge"><span class="tag tag-tp">TRUE POSITIVE</span></span>
+          </div>
+          <div class="detail-cell">
+            <span class="cell-label">Detection Latency</span>
+            <span class="cell-val mono" id="modal-latency-badge" style="color: #38bdf8;">N/A</span>
+          </div>
         </div>
+
+        <div class="section-title">Detection Rule Trigger Rationale</div>
+        <div id="modal-trigger-rationale" style="font-family: var(--font-mono); font-size: 11px; background: #090d13; padding: 10px; border-radius: 4px; border: 1px solid var(--border-color); color: #79c0ff; line-height: 1.4;">Rule matched telemetry pattern.</div>
+
+        <div class="section-title" style="margin-top: 6px;">Forensic Confidence Assessment</div>
+        <div id="modal-confidence-assessment" style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">Signature match against detection rule. Corroborating host evidence required.</div>
+
+        <div id="modal-sysmon-forensics" class="sysmon-evidence-card" style="display: none;"></div>
 
         <div class="section-title">Triggering Telemetry Log Evidence</div>
         <pre class="log-code-box" id="modal-raw-logs"></pre>

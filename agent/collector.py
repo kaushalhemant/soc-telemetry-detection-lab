@@ -32,7 +32,14 @@ class EndpointCollectorAgent:
     Cross-platform lightweight Security Endpoint Collector Agent.
     Monitors process creation, system auth events, network connections, and active host state.
     """
-    def __init__(self, server_url: str = "http://127.0.0.1:8000", agent_id: str = None):
+    def __init__(
+        self,
+        server_url: str = "http://127.0.0.1:8000",
+        agent_id: str = None,
+        enable_sysmon: bool = True,
+        batch_size: int = 100,
+        checkpoint_dir: str = None
+    ):
         self.server_url = server_url.rstrip("/")
         self.ingest_endpoint = f"{self.server_url}/api/v1/ingest"
         self.register_endpoint = f"{self.server_url}/api/v1/client-device/register"
@@ -41,6 +48,25 @@ class EndpointCollectorAgent:
         self.is_running = False
         self.device_info = self.acquire_device_details()
         self.seen_pids = set()
+        self.batch_size = min(max(batch_size, 1), 500)
+        self.enable_sysmon = enable_sysmon
+        self.retry_buffer = []
+
+        # Initialize Windows Sysmon reader if on Windows platform
+        self.sysmon_reader = None
+        if self.enable_sysmon and sys.platform == "win32":
+            try:
+                try:
+                    from .sysmon_reader import SysmonReader
+                except ImportError:
+                    try:
+                        from agent.sysmon_reader import SysmonReader
+                    except ImportError:
+                        from sysmon_reader import SysmonReader
+                self.sysmon_reader = SysmonReader(checkpoint_dir=checkpoint_dir, batch_size=self.batch_size)
+            except Exception as e:
+                print(f"[Sysmon Init Warning] Could not initialize Sysmon reader: {e}")
+                self.sysmon_reader = None
 
     def acquire_device_details(self) -> dict:
         """
@@ -260,12 +286,19 @@ class EndpointCollectorAgent:
         """
         Starts the continuous autonomous telemetry collection loop.
         """
+        sysmon_status = (
+            f"ENABLED (Channel: {self.sysmon_reader.channel} | Checkpoint: {self.sysmon_reader.checkpoint.last_record_id})"
+            if self.sysmon_reader
+            else "DISABLED (Not Windows or Sysmon collection inactive)"
+        )
         print("=" * 70)
         print(f"  🛡️  AUTONOMOUS ENDPOINT TELEMETRY AGENT")
         print(f"  Agent ID   : {self.agent_id}")
         print(f"  Host Device: {self.hostname} ({self.device_info['os_name']} {self.device_info['os_release']})")
         print(f"  Specs      : {self.device_info['cpu_cores']} Cores | {self.device_info['total_ram_gb']} GB RAM | IP: {self.device_info['ip_address']}")
+        print(f"  Sysmon     : {sysmon_status}")
         print(f"  Target SOC : {self.ingest_endpoint}")
+        print(f"  Batch Size : {self.batch_size} (Max limit: 500)")
         print(f"  Interval   : {interval_seconds}s (Continuous Live Streaming)")
         print("=" * 70)
 
@@ -276,18 +309,49 @@ class EndpointCollectorAgent:
         consecutive_failures = 0
 
         while self.is_running:
+            # 1. Pull unacknowledged retry events from previous cycles
+            current_batch = list(self.retry_buffer)
+            self.retry_buffer.clear()
+
+            # 2. Collect Sysmon events if on Windows
+            sysmon_events = []
+            pending_ckpt = 0
+            if self.sysmon_reader and sys.platform == "win32":
+                try:
+                    sysmon_events, pending_ckpt = self.sysmon_reader.read_events(limit=self.batch_size)
+                except Exception as e:
+                    print(f"[{get_utc_now_iso()[:19]}] [Sysmon Read Warning] {e}")
+
+            # 3. Collect host process and network socket telemetry
             proc_events = self.collect_system_processes()
             net_events = self.collect_network_telemetry()
-            all_events = proc_events + net_events
+            new_events = sysmon_events + proc_events + net_events
 
-            if all_events:
-                success = self.send_telemetry_batch(all_events)
+            # 4. Respect maximum batch size limit of 500
+            space = 500 - len(current_batch)
+            if space > 0:
+                current_batch.extend(new_events[:space])
+                overflow = new_events[space:]
+            else:
+                overflow = new_events
+
+            if overflow:
+                self.retry_buffer.extend(overflow[:500])
+
+            # 5. Ingest batch and commit checkpoint ONLY upon verified success
+            if current_batch:
+                success = self.send_telemetry_batch(current_batch)
                 if success:
                     consecutive_failures = 0
+                    # Advance Sysmon checkpoint only after verified API acceptance
+                    if self.sysmon_reader and pending_ckpt > self.sysmon_reader.checkpoint.last_record_id:
+                        self.sysmon_reader.commit_checkpoint(pending_ckpt)
                 else:
                     consecutive_failures += 1
+                    # Retain unacknowledged events for retry
+                    self.retry_buffer = (current_batch + self.retry_buffer)[:1000]
                     if consecutive_failures % 5 == 0:
-                        print(f"[*] Server at {self.server_url} unreachable. Retrying automatically in background...")
+                        print(f"[*] Server at {self.server_url} unreachable. Retrying {len(self.retry_buffer)} events in background...")
 
             if run_once:
                 break
@@ -319,10 +383,32 @@ def main():
         action="store_true",
         help="Collect and send a single batch of events, then exit"
     )
+    parser.add_argument(
+        "--no-sysmon",
+        action="store_true",
+        help="Disable Windows Sysmon telemetry collection"
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=100,
+        help="Maximum events per ingestion batch (max 500, default: 100)"
+    )
+    parser.add_argument(
+        "--checkpoint-dir",
+        default=None,
+        help="Custom directory to store persistent Sysmon checkpoint files"
+    )
 
     args = parser.parse_args()
 
-    agent = EndpointCollectorAgent(server_url=args.server, agent_id=args.agent_id)
+    agent = EndpointCollectorAgent(
+        server_url=args.server,
+        agent_id=args.agent_id,
+        enable_sysmon=not args.no_sysmon,
+        batch_size=args.batch_size,
+        checkpoint_dir=args.checkpoint_dir
+    )
     try:
         agent.start_collecting(interval_seconds=args.interval, run_once=args.once)
     except KeyboardInterrupt:

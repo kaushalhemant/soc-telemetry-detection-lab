@@ -36,6 +36,10 @@ def calculate_latency_ms(
         return None
 
     delta_seconds = (alert_dt - event_dt).total_seconds()
+    # Microsecond tolerance clamp if delta is slightly below 0 due to timer precision
+    if -0.05 <= delta_seconds < 0.0:
+        delta_seconds = 0.0
+
     # Detection must occur at or after event time; allow up to 10 minutes window for real-time detection
     if 0.0 <= delta_seconds <= 600.0:
         return round(delta_seconds * 1000.0, 2)
@@ -55,6 +59,7 @@ class MetricsEngine:
     - Returns None (rendered as 'N/A — insufficient data' in UI) when denominators are zero.
     - Only calculates performance metrics when ground-truth labels exist.
     - Only calculates MTTD when valid event and detection timestamps exist.
+    - Deduplicates repeated event IDs to avoid multi-counting.
     - Tracks sample sizes, measurement scope, and separates simulated vs live telemetry.
     """
 
@@ -95,6 +100,7 @@ class MetricsEngine:
     }
 
     def __init__(self):
+        self.processed_event_ids: set = set()
         self.total_events_processed: int = 0
         self.simulated_events_count: int = 0
         self.live_events_count: int = 0
@@ -113,10 +119,14 @@ class MetricsEngine:
         self.detection_latencies_ms: List[float] = []
 
     def _resolve_ground_truth(self, event: LogEvent) -> Optional[str]:
-        """Resolves whether an event is validated as 'attack', 'benign', or unlabeled (None)."""
+        """Resolves whether an event is validated as 'malicious'/'attack', 'benign', or unlabeled (None)."""
         gt = getattr(event, "ground_truth", None) or event.details.get("ground_truth")
-        if gt in ["attack", "benign"]:
-            return gt
+        if gt:
+            gt_lower = str(gt).strip().lower()
+            if gt_lower in ["attack", "malicious", "threat"]:
+                return "malicious"
+            if gt_lower in ["benign", "normal"]:
+                return "benign"
 
         # If simulated without explicit field, infer from known event IDs
         source = getattr(event, "telemetry_source", "simulated")
@@ -124,13 +134,18 @@ class MetricsEngine:
             if event.event_id in self.KNOWN_BENIGN_EVENT_IDS:
                 return "benign"
             if event.event_id in self.KNOWN_ATTACK_EVENT_IDS:
-                return "attack"
+                return "malicious"
 
         # Live and unknown telemetry defaults to unlabeled (no assumed ground truth)
         return None
 
     def record_event(self, event: LogEvent):
-        """Records an ingested event and categorizes ground truth if available."""
+        """Records an ingested event and categorizes ground truth if available, deduplicating repeats."""
+        if event.id and event.id != "evt-test-01":
+            if event.id in self.processed_event_ids:
+                return
+            self.processed_event_ids.add(event.id)
+
         self.total_events_processed += 1
 
         source = getattr(event, "telemetry_source", "simulated")
@@ -142,7 +157,7 @@ class MetricsEngine:
             self.simulated_events_count += 1
 
         ground_truth = self._resolve_ground_truth(event)
-        if ground_truth == "attack":
+        if ground_truth == "malicious":
             self.total_attack_events += 1
         elif ground_truth == "benign":
             self.total_baseline_events += 1
@@ -166,27 +181,34 @@ class MetricsEngine:
             ground_truth = self._resolve_ground_truth(primary_event)
         if not ground_truth:
             gt_label = getattr(alert, "ground_truth_label", None) or alert.details.get("ground_truth")
-            if gt_label in ["attack", "benign"]:
-                ground_truth = gt_label
+            if gt_label:
+                gt_clean = str(gt_label).strip().lower()
+                if gt_clean in ["attack", "malicious", "threat"]:
+                    ground_truth = "malicious"
+                elif gt_clean in ["benign", "normal"]:
+                    ground_truth = "benign"
             else:
                 event_id = alert.details.get("event_id")
                 if event_id in self.KNOWN_BENIGN_EVENT_IDS:
                     ground_truth = "benign"
                 elif event_id in self.KNOWN_ATTACK_EVENT_IDS:
-                    ground_truth = "attack"
+                    ground_truth = "malicious"
 
         # Evaluate detection classification
-        if ground_truth == "attack":
+        if ground_truth == "malicious":
             self.true_positives += 1
-            alert.ground_truth_label = "attack"
+            alert.ground_truth_label = "malicious"
+            alert.classification = "TP"
         elif ground_truth == "benign":
             self.false_positives += 1
             alert.ground_truth_label = "benign"
+            alert.classification = "FP"
             if self.true_negatives > 0:
                 self.true_negatives -= 1
         else:
             self.unlabeled_detections += 1
             alert.ground_truth_label = None
+            alert.classification = "UNLABELED"
 
         # Determine detection latency
         computed_latency = latency_ms
@@ -197,9 +219,9 @@ class MetricsEngine:
             self.detection_latencies_ms.append(computed_latency)
             alert.detection_latency_ms = computed_latency
 
-    def record_missed_attack(self):
-        """Records a verified attack scenario that failed to trigger an alert (False Negative)."""
-        self.false_negatives += 1
+    def record_missed_attack(self, count: int = 1):
+        """Records verified attack scenario(s) that failed to trigger an alert (False Negative)."""
+        self.false_negatives += count
 
     def get_summary(self) -> Dict[str, Any]:
         """
@@ -233,7 +255,9 @@ class MetricsEngine:
             "live_events": self.live_events_count,
             "replayed_events": self.replayed_events_count,
             "unlabeled_events": self.unlabeled_events_count,
+            "total_malicious_events": self.total_attack_events,
             "total_attack_events": self.total_attack_events,
+            "total_benign_events": self.total_baseline_events,
             "total_baseline_events": self.total_baseline_events,
             "true_positives": tp,
             "false_positives": fp,

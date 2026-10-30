@@ -30,6 +30,21 @@ class AlertManager:
         if group_key and rule.threshold_group_by:
             desc += f" (Threshold breached: {len(triggering_events)} events for {rule.threshold_group_by}={group_key})"
 
+        # Extract matched fields and build triggering condition rationale
+        matched_fields = {}
+        for k, expected_v in rule.selection.items():
+            actual_v = getattr(primary_event, k, None)
+            if actual_v is None and hasattr(primary_event, "details"):
+                actual_v = primary_event.details.get(k)
+            matched_fields[k] = {"expected": expected_v, "actual": actual_v}
+
+        explanation_parts = [f"{k}='{v['actual']}'" for k, v in matched_fields.items() if v["actual"] is not None]
+        explanation = f"Rule condition matched on {rule.log_type}: " + ", ".join(explanation_parts)
+        if group_key and rule.threshold_group_by:
+            explanation += f" (Threshold breached: {len(triggering_events)}/{rule.threshold_count} events on {rule.threshold_group_by}='{group_key}')"
+
+        gt_label = getattr(primary_event, "ground_truth", None) or primary_event.details.get("ground_truth")
+
         alert = DetectionAlert(
             alert_id=f"ALT-{uuid.uuid4().hex[:8].upper()}",
             rule_id=rule.id,
@@ -50,13 +65,19 @@ class AlertManager:
                 "user": primary_event.user,
                 "process_name": primary_event.process_name,
                 "event_id": primary_event.event_id,
-                "event_count": len(triggering_events)
+                "event_count": len(triggering_events),
+                "matched_fields": matched_fields,
+                "trigger_reason": explanation,
+                "confidence_assessment": f"Signature match against {rule.id} ({rule.title}). Indicates activity consistent with {rule.mitre_tactic} ({rule.mitre_technique_id}). Does not constitute proof of confirmed compromise without corroborating host forensics.",
+                "scenario_id": getattr(primary_event, "scenario_id", None),
+                "primary_event_details": getattr(primary_event, "details", {})
             },
             status=TriageStatus.NEW,
             analyst_notes=[],
             tuned=False,
             telemetry_source=getattr(primary_event, "telemetry_source", "simulated"),
-            ground_truth_label=getattr(primary_event, "ground_truth", None)
+            ground_truth_label=gt_label,
+            classification="TP" if gt_label in ["malicious", "attack"] else ("FP" if gt_label == "benign" else None)
         )
 
         self.alert_history.insert(0, alert)  # Keep latest at top

@@ -44,15 +44,21 @@ class Rule:
 
         # 2. Selection criteria match
         for key, expected_value in self.selection.items():
-            actual_value = getattr(event, key, None)
+            actual_value = self._extract_field(event, key)
             if actual_value is None and hasattr(event, "details"):
                 actual_value = event.details.get(key)
             
             if isinstance(expected_value, list):
-                if actual_value not in expected_value:
+                if isinstance(actual_value, str):
+                    if actual_value.lower() not in [str(x).lower() for x in expected_value]:
+                        return False
+                elif actual_value not in expected_value:
                     return False
             else:
-                if actual_value != expected_value:
+                if isinstance(expected_value, str) and isinstance(actual_value, str):
+                    if actual_value.lower() != expected_value.lower():
+                        return False
+                elif actual_value != expected_value:
                     return False
 
         # 3. Custom condition criteria check if present
@@ -85,15 +91,53 @@ class Rule:
         if actual is None:
             return False
         if operator == "equals":
+            if isinstance(actual, str) and isinstance(target, str):
+                return actual.lower() == target.lower()
             return actual == target
+        elif operator == "not_equals":
+            if isinstance(actual, str) and isinstance(target, str):
+                return actual.lower() != target.lower()
+            return actual != target
         elif operator == "in":
             if isinstance(target, list):
+                if isinstance(actual, str):
+                    return actual.lower() in [str(x).lower() for x in target]
                 return actual in target
-            return str(actual) in str(target)
+            return str(actual).lower() in str(target).lower()
+        elif operator == "not_in":
+            if isinstance(target, list):
+                if isinstance(actual, str):
+                    return actual.lower() not in [str(x).lower() for x in target]
+                return actual not in target
+            return str(actual).lower() not in str(target).lower()
         elif operator == "greater_than":
-            return actual > target
+            try:
+                return float(actual) > float(target)
+            except (ValueError, TypeError):
+                return actual > target
         elif operator == "contains":
             return str(target).lower() in str(actual).lower()
+        elif operator == "contains_any":
+            actual_lower = str(actual).lower()
+            if isinstance(target, list):
+                return any(str(item).lower() in actual_lower for item in target)
+            return str(target).lower() in actual_lower
+        elif operator == "startswith":
+            actual_lower = str(actual).lower()
+            if isinstance(target, list):
+                return any(actual_lower.startswith(str(item).lower()) for item in target)
+            return actual_lower.startswith(str(target).lower())
+        elif operator == "endswith":
+            actual_lower = str(actual).lower()
+            if isinstance(target, list):
+                return any(actual_lower.endswith(str(item).lower()) for item in target)
+            return actual_lower.endswith(str(target).lower())
+        elif operator == "regex":
+            try:
+                import re
+                return bool(re.search(str(target), str(actual), re.IGNORECASE))
+            except Exception:
+                return False
         return False
 
 def load_rules_from_directory(directory_path: str) -> List[Rule]:

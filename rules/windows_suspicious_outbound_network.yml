@@ -1,0 +1,31 @@
+id: RULE-WIN-003
+title: Suspicious Outbound Network Connection by Script Interpreter
+description: Detects script interpreters, shells, or LOLBins (powershell, cmd, certutil, rundll32, wscript) initiating outbound network connections on common C2 or reverse shell ports.
+status: production
+author: SOC Detection Lab
+date: 2026/02/15
+severity: HIGH
+
+log_source:
+  log_type: windows.sysmon
+
+detection:
+  selection:
+    event_id: SYSMON_NETWORK_CONNECT
+  condition:
+    - field: process_name
+      operator: in
+      value: ["powershell.exe", "pwsh.exe", "cmd.exe", "certutil.exe", "rundll32.exe", "wscript.exe", "cscript.exe"]
+    - field: details.DestinationPort
+      operator: in
+      value: [1337, 4444, 5555, 6666, 7070, 8888, 9001, 9999]
+
+tags:
+  mitre_tactic: Command and Control
+  mitre_technique_id: T1071.001
+  mitre_technique_name: "Application Layer Protocol: Web Protocols"
+
+remediation:
+  - Verify the remote IP address and determine if it belongs to authorized infrastructure or known C2 threat feeds.
+  - Terminate the initiating process and review network traffic captures (PCAP) for bidirectional command transmission.
+  - Apply host-based firewall rules to restrict script interpreters from initiating arbitrary outbound connections.

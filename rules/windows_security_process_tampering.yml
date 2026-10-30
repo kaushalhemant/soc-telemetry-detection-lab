@@ -1,0 +1,28 @@
+id: RULE-WIN-005
+title: Critical Security Defense Process Termination
+description: Detects unexpected termination of core Windows security services or monitoring agents (Sysmon, Windows Defender MsMpEng, EDR agents) indicative of defensive evasion or tool disabling.
+status: production
+author: SOC Detection Lab
+date: 2026/02/15
+severity: CRITICAL
+
+log_source:
+  log_type: windows.sysmon
+
+detection:
+  selection:
+    event_id: SYSMON_PROCESS_TERMINATE
+  condition:
+    - field: process_name
+      operator: in
+      value: ["sysmon.exe", "sysmon64.exe", "msmpeng.exe", "nissrv.exe", "csagent.exe", "edrservice.exe"]
+
+tags:
+  mitre_tactic: Defense Evasion
+  mitre_technique_id: T1562.001
+  mitre_technique_name: "Impair Defenses: Disable or Modify Tools"
+
+remediation:
+  - Verify whether the process termination was an authorized maintenance task or an adversary disabling defense tools.
+  - Review Windows System and Security logs for Event ID 7036 (service state changes) or Event ID 1102 (audit log cleared).
+  - Immediately restore security monitoring agents and isolate the host for forensic acquisition.
